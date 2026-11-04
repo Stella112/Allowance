@@ -50,6 +50,14 @@ One line per fact: **status**, the fact, its source, and the date checked. Addre
 ## Tooling
 
 - VERIFIED: Foundry **v1.8.4 or later** is required for the B20 precompiles. Tests and forks must set `hardfork = "base:Cobalt"`, or a fork runs Beryl rules. Source: https://docs.base.org/sdks/base-anvil. Checked 2026-11-04.
+- VERIFIED: Foundry is pinned to **v1.8.6**, released 2026-10-21 per the GitHub releases. v1.9.0 (2026-11-02) is too new. Libraries: forge-std **v1.17.0** (2026-09-30) and OpenZeppelin Contracts **v5.7.0** (2026-07-29), installed as submodules. Checked 2026-11-04.
+- VERIFIED (fork, closes blockers 2 and 4): `forge test` on a Base mainnet fork at block 53,515,412, using the public RPC, passed 4 out of 4 (`contracts/test/ForkSmoke.t.sol`):
+  - The B20 precompiles respond.
+  - A $0.25 USDC → AAPLc swap and a USDC → NVDAc swap through the Slipstream router credit a **brand-new contract**; $0.25 bought 70,747 raw AAPLc.
+  - That contract can then transfer the tokens on.
+  - `balanceOfUI` equals raw × multiplier.
+  Checked 2026-11-04.
+- MEASURED: Base gas price was 0.006 gwei (base fee 0.005 gwei) with ETH at $2,420 (Coinbase spot). That makes 1M gas ≈ $0.015 of L2 execution, plus a small L1 data fee. Checked 2026-11-04.
 - VERIFIED: deploy with a Foundry keystore (`cast wallet import`), never a raw key, and verify on Basescan with `ETHERSCAN_API_KEY`. Source: base/skills deploy-contracts.md. Checked 2026-11-04.
 - NOTE: base/skills says to add Builder Code (ERC-8021) attribution to every transaction. This is optional and not in our scope; it's logged in IDEAS.md.
 
