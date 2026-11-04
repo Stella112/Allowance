@@ -4,5 +4,6 @@ One line per task, describing how AI was used. This feeds the "AI tools used" su
 
 - 2026-11-04: Claude Code (Opus 5.5) restated the build prompt and found gaps in it (the vault cap would be hit during judging, B20 tokens are precompiles, and fork support was in doubt).
 - 2026-11-04: Phase 0 verification. Claude Code read the Base docs, the base/skills repo, the official Coinbase tokenized-stocks API, the Aerodrome Slipstream GitHub and Circle's docs. It then ran read-only mainnet checks (pools, quotes, transfer policies) and recorded each fact in docs/VERIFIED.md.
+- 2026-11-04: Phase 1. Claude Code wrote FamilyVault and FamilyVaultFactory: per-kid ledgers, caps, allowance timing, a parent match, gifts, pause and emergency withdraw. It also wrote 32 tests that run against the real USDC, stock tokens and Aerodrome on a mainnet fork, taking minOut from the live quoter. All 32 passed on the first run. A dry run of the deploy script measured 5.42M gas, about $0.13.
 - 2026-11-04: Claude Code installed Foundry (pinned to v1.8.6 because the newest release was too recent) and wrote a mainnet-fork smoke test. The test proved that real Aerodrome swaps credit a brand-new contract with Apple and Nvidia stock tokens.
 - 2026-11-04: Claude Code scaffolded Next.js 16 with exact pinned versions, plus the docs, the env template and `scripts/verify-chain.mjs`.
