@@ -47,7 +47,7 @@ export default function Home() {
           paid by Allowance.
         </p>
         <Link
-          href="/signup"
+          href="/parent"
           className="rounded-2xl border border-night-700 px-6 py-3 text-center font-medium text-moon hover:bg-night-800"
         >
           Sign up as a parent
