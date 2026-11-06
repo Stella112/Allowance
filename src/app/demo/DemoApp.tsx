@@ -67,6 +67,16 @@ export default function DemoApp() {
     api<State>("state").then(setState).catch(() => setState(null));
   }, []);
 
+  // While a transaction is still landing (e.g. Tobi's first allowance), refresh every 3 seconds.
+  const landing = !!state?.events.some((e) => e.status === "sending");
+  useEffect(() => {
+    if (!landing || busy) return;
+    const t = setInterval(() => {
+      api<State>("state").then(setState).catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+  }, [landing, busy]);
+
   const run = useCallback(async (label: string, fn: () => Promise<{ state?: State; replay?: boolean }>) => {
     setBusy(label);
     setError(null);
@@ -432,6 +442,9 @@ function Savings({ state }: { state: State }) {
     <div className={`rounded-2xl p-4 ${state.session.morning ? "bg-white" : "bg-night-900"}`}>
       <p className="text-sm opacity-80">Tobi&apos;s savings (read live from Base)</p>
       <p className="text-3xl font-bold">{h ? usd(h.usdcMicro) : "…"}</p>
+      {state.events.some((e) => e.kind === "allowance" && e.status === "sending") && (
+        <p className="text-sm opacity-80">⏳ An allowance is landing on Base right now…</p>
+      )}
       {h && h.stocks.some((s) => s.raw !== "0") && (
         <ul className="mt-2 space-y-1 text-sm">
           {h.stocks

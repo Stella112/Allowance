@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import {
   approvePitch,
   createGift,
@@ -52,7 +53,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/demo/[action]">
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
     if (action === "start" || action === "reset") {
-      const { session, replay: isReplay } = await startSession(await ipHash());
+      const { session, replay: isReplay, finish } = await startSession(await ipHash());
+      if (finish) after(finish);
       const jar = await cookies();
       if (!session) {
         jar.delete(COOKIE);

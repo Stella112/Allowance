@@ -69,7 +69,9 @@ async function assertCanSpend(session: DemoSession, amount: bigint) {
 
 // ---------------------------------------------------------------- sessions
 
-export async function startSession(ipHash: string): Promise<{ session: DemoSession | null; replay: boolean }> {
+export async function startSession(
+  ipHash: string,
+): Promise<{ session: DemoSession | null; replay: boolean; finish?: () => Promise<void> }> {
   const hourAgo = new Date(Date.now() - 3600_000).toISOString();
   const { count } = await db().from("demo_sessions").select("id", { count: "exact", head: true }).eq("ip_hash", ipHash).gte("created_at", hourAgo);
   if ((count ?? 0) >= config.demo.maxSessionsPerIpPerHour) {
@@ -92,14 +94,16 @@ export async function startSession(ipHash: string): Promise<{ session: DemoSessi
     .insert({ session_id: id, kind: "allowance", status: "sending", usdc_micro: Number(config.demo.allowanceMicro) })
     .select()
     .single();
-  try {
-    const { hash } = await setAndReleaseAllowance(kidId);
-    await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", ev!.id);
-  } catch (err) {
-    await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", ev!.id);
-    throw new DemoError("We couldn't reach Base just now. Please try again in a moment.", 503);
-  }
-  return { session: session as DemoSession, replay: false };
+  // Sent after the response so the demo opens instantly; the UI polls until it confirms.
+  const finish = async () => {
+    try {
+      const { hash } = await setAndReleaseAllowance(kidId);
+      await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", ev!.id);
+    } catch (err) {
+      await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", ev!.id);
+    }
+  };
+  return { session: session as DemoSession, replay: false, finish };
 }
 
 export async function getSession(id: string | undefined) {
@@ -153,6 +157,9 @@ export async function createPitch(session: DemoSession, ticker: Ticker, why: str
 // ---------------------------------------------------------------- parent: approve
 
 export async function approvePitch(session: DemoSession, eventId: number) {
+  const first = (await events(session.id)).find((e) => e.kind === "allowance");
+  if (first?.status === "sending") throw new DemoError("Tobi's allowance is still landing on Base. Try again in a few seconds.", 409);
+  if (first?.status === "failed") throw new DemoError("Tobi's allowance didn't land, so there's nothing to spend. Tap Reset demo.", 409);
   await assertCanSpend(session, config.demo.pitchMicro);
   // Claim the pitch atomically so a double tap can never buy twice.
   const { data: claimed } = await db()
@@ -214,31 +221,39 @@ export async function skipToMorning(session: DemoSession) {
 
   const kidId = session.kid_id as Hash;
   const queued = (await events(session.id)).filter((e) => e.kind === "gift" && e.status === "queued");
-  for (const gift of queued) {
-    await db().from("demo_events").update({ status: "sending" }).eq("id", gift.id);
-    try {
-      const tag = stringToHex(gift.gifter_name ?? "gift", { size: 32 });
-      const { hash, tokensOut } = await giftFromRelayer(kidId, gift.ticker as Ticker, BigInt(gift.usdc_micro), tag);
-      await db()
-        .from("demo_events")
-        .update({ status: "confirmed", tx_hash: hash, tokens_raw: tokensOut.toString(), executed_at: new Date().toISOString() })
-        .eq("id", gift.id);
-    } catch (err) {
-      await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", gift.id);
-    }
-  }
 
-  const { data: ev } = await db()
-    .from("demo_events")
-    .insert({ session_id: session.id, kind: "allowance", status: "sending", usdc_micro: Number(config.demo.allowanceMicro) })
-    .select()
-    .single();
-  try {
-    const { hash } = await releaseAllowance(kidId);
-    await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", ev!.id);
-  } catch (err) {
-    await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", ev!.id);
-  }
+  const deliverGifts = async () => {
+    for (const gift of queued) {
+      await db().from("demo_events").update({ status: "sending" }).eq("id", gift.id);
+      try {
+        const tag = stringToHex(gift.gifter_name ?? "gift", { size: 32 });
+        const { hash, tokensOut } = await giftFromRelayer(kidId, gift.ticker as Ticker, BigInt(gift.usdc_micro), tag);
+        await db()
+          .from("demo_events")
+          .update({ status: "confirmed", tx_hash: hash, tokens_raw: tokensOut.toString(), executed_at: new Date().toISOString() })
+          .eq("id", gift.id);
+      } catch (err) {
+        await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", gift.id);
+      }
+    }
+  };
+
+  const midnightAllowance = async () => {
+    const { data: ev } = await db()
+      .from("demo_events")
+      .insert({ session_id: session.id, kind: "allowance", status: "sending", usdc_micro: Number(config.demo.allowanceMicro) })
+      .select()
+      .single();
+    try {
+      const { hash } = await releaseAllowance(kidId);
+      await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", ev!.id);
+    } catch (err) {
+      await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", ev!.id);
+    }
+  };
+
+  // Independent transactions from one wallet; viem's nonce manager keeps their nonces in order.
+  await Promise.all([deliverGifts(), midnightAllowance()]);
 }
 
 // ---------------------------------------------------------------- thank-you

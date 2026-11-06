@@ -41,7 +41,8 @@ const quoterAbi = parseAbi([
 const transport = () =>
   fallback(config.rpcUrls.map((u) => http(u, { retryCount: 3, retryDelay: 400, timeout: 20_000 })));
 
-export const publicClient = createPublicClient({ chain: base, transport: transport() });
+// Batch reads into one multicall and poll for receipts every second (Base blocks are ~2s).
+export const publicClient = createPublicClient({ chain: base, transport: transport(), batch: { multicall: true }, pollingInterval: 1_000 });
 
 let _wallet: ReturnType<typeof makeWallet> | null = null;
 function makeWallet() {
@@ -56,7 +57,7 @@ const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
 
 async function send(fn: () => Promise<Hash>) {
   const hash = await fn();
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000, pollingInterval: 1_000 });
   if (receipt.status !== "success") throw new Error(`Transaction reverted: ${hash}`);
   return receipt;
 }
