@@ -56,8 +56,11 @@ const SLIPPAGE_BPS = 100n; // 1%
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
 
 async function send(fn: () => Promise<Hash>) {
+  const t0 = Date.now();
   const hash = await fn();
+  const t1 = Date.now();
   const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000, pollingInterval: 1_000 });
+  console.log(`[chain] tx ${hash.slice(0, 10)} submit ${t1 - t0}ms, confirm ${Date.now() - t1}ms`);
   if (receipt.status !== "success") throw new Error(`Transaction reverted: ${hash}`);
   return receipt;
 }
@@ -102,18 +105,20 @@ export async function releaseAllowance(kidId: Hash) {
   return { hash: receipt.transactionHash };
 }
 
-export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint) {
-  const { minOut } = await quoteMinOut(ticker, usdcMicro);
+/** Buys shares for an approved pitch. matchBps (0..10000) is the parent's match, paid from the family pool. */
+export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint, matchBps = 0n) {
+  const total = usdcMicro + (usdcMicro * matchBps) / 10_000n;
+  const { minOut } = await quoteMinOut(ticker, total);
   const receipt = await send(() =>
     wallet().writeContract({
       address: config.demoVault(),
       abi: vaultAbi,
       functionName: "approvePitchBuy",
-      args: [kidId, STOCKS[ticker].token, usdcMicro, 0n, minOut, deadline()],
+      args: [kidId, STOCKS[ticker].token, usdcMicro, matchBps, minOut, deadline()],
     }),
   );
   const [ev] = parseEventLogs({ abi: vaultAbi, eventName: "PitchBought", logs: receipt.logs });
-  return { hash: receipt.transactionHash, tokensOut: ev?.args.tokensOut ?? 0n };
+  return { hash: receipt.transactionHash, tokensOut: ev?.args.tokensOut ?? 0n, matchUsdc: ev?.args.matchUsdc ?? 0n };
 }
 
 /** Demo gift: the relayer wallet plays Aunty Funmi and pays from its own USDC. */
@@ -140,8 +145,17 @@ export async function giftFromRelayer(kidId: Hash, ticker: Ticker, usdcMicro: bi
 
 export type Holdings = {
   usdcMicro: string;
-  stocks: { ticker: Ticker; raw: string; shares: number }[];
+  stocks: { ticker: Ticker; raw: string; shares: number; multiplier: string }[];
 };
+
+/** Each stock token's current uiMultiplier (WAD). A rise means a real dividend was paid. */
+export async function uiMultipliers(): Promise<Record<Ticker, string>> {
+  const tickers = Object.keys(STOCKS) as Ticker[];
+  const values = await Promise.all(
+    tickers.map((t) => publicClient.readContract({ address: STOCKS[t].token, abi: b20Abi, functionName: "uiMultiplier" })),
+  );
+  return Object.fromEntries(tickers.map((t, i) => [t, values[i].toString()])) as Record<Ticker, string>;
+}
 
 /** Reads the kid's balances from the chain (the source of truth). */
 export async function kidHoldings(kidId: Hash): Promise<Holdings> {
@@ -160,7 +174,7 @@ export async function kidHoldings(kidId: Hash): Promise<Holdings> {
       const raw = rest[i * 2];
       const mult = rest[i * 2 + 1];
       // shares = raw (8 decimals) x multiplier (WAD)
-      return { ticker: t, raw: raw.toString(), shares: Number((raw * mult) / 10n ** 18n) / 1e8 };
+      return { ticker: t, raw: raw.toString(), shares: Number((raw * mult) / 10n ** 18n) / 1e8, multiplier: mult.toString() };
     }),
   };
 }

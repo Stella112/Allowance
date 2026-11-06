@@ -17,6 +17,7 @@ export type DemoSession = {
   virtual_now: string;
   morning: boolean;
   ip_hash: string;
+  multipliers: Record<string, string> | null;
   created_at: string;
 };
 
@@ -37,6 +38,9 @@ export type DemoEvent = {
   tx_hash: string | null;
   error: string | null;
   ref_event_id: number | null;
+  match_micro: number;
+  match_pct: number;
+  voice_path: string | null;
   created_at: string;
   executed_at: string | null;
 };

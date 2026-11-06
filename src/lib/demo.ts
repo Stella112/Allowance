@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { keccak256, stringToHex, toHex, type Hash } from "viem";
 import { config, txUrl } from "./config";
 import { db, type DemoEvent, type DemoSession } from "./db";
-import { demoFunds, giftFromRelayer, kidHoldings, pitchBuy, releaseAllowance, setAndReleaseAllowance, type Holdings } from "./chain";
+import { demoFunds, giftFromRelayer, kidHoldings, pitchBuy, quoteMinOut, releaseAllowance, setAndReleaseAllowance, uiMultipliers, type Holdings } from "./chain";
 import { STOCKS, type Ticker } from "./stocks";
 
 export class DemoError extends Error {
@@ -33,14 +33,14 @@ export const ipHashOf = (ip: string) => createHash("sha256").update(`allowance-d
 async function spentSince(since: Date, sessionId?: string) {
   let q = db()
     .from("demo_events")
-    .select("usdc_micro")
+    .select("usdc_micro, match_micro")
     .in("kind", [...SPEND_KINDS])
     .in("status", [...LIVE_STATUSES])
     .gte("created_at", since.toISOString());
   if (sessionId) q = q.eq("session_id", sessionId);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).reduce((s, r) => s + BigInt(r.usdc_micro), 0n);
+  return (data ?? []).reduce((s, r) => s + BigInt(r.usdc_micro) + BigInt(r.match_micro ?? 0), 0n);
 }
 
 const startOfUtcDay = () => {
@@ -51,11 +51,11 @@ const startOfUtcDay = () => {
 /** True when a new session can afford its full night shift (pitch + gift + 2 allowances). */
 async function budgetAvailable() {
   const d = config.demo;
-  const perSession = d.pitchMicro + d.giftMicro;
+  const perSession = d.pitchMicro * 2n + d.giftMicro; // pitch + up to a 100% match + gift
   const [today, funds] = await Promise.all([spentSince(startOfUtcDay()), demoFunds()]);
   return (
     today + perSession <= d.dailyCapMicro &&
-    funds.pool >= d.allowanceMicro * 2n &&
+    funds.pool >= d.allowanceMicro * 2n + d.pitchMicro &&
     funds.relayerUsdc >= d.giftMicro
   );
 }
@@ -81,9 +81,11 @@ export async function startSession(
 
   const id = randomUUID();
   const kidId = keccak256(toHex(`allowance-demo-kid:${id}`)); // anonymous on-chain id, never a name
+  // Remember each stock's dividend multiplier at bedtime, so the Morning Report can show a real dividend if one is paid.
+  const multipliers = await uiMultipliers().catch(() => null);
   const { data: session, error } = await db()
     .from("demo_sessions")
-    .insert({ id, kid_id: kidId, virtual_now: lagosAt(0, 21, 30).toISOString(), ip_hash: ipHash })
+    .insert({ id, kid_id: kidId, virtual_now: lagosAt(0, 21, 30).toISOString(), ip_hash: ipHash, multipliers })
     .select()
     .single();
   if (error) throw error;
@@ -118,18 +120,76 @@ async function events(sessionId: string) {
   return (data ?? []) as DemoEvent[];
 }
 
+export type Score = { eventId: number; ticker: Ticker; changePct: number };
+export type Dividend = { ticker: Ticker; extraShares: number };
+
 export type DemoState = {
   session: { id: string; virtualNow: string; morning: boolean };
-  events: (DemoEvent & { txUrl: string | null })[];
+  events: (DemoEvent & { txUrl: string | null; voiceUrl: string | null })[];
   holdings: Holdings | null;
+  /** How each confirmed buy has done since (same USDC amount quoted again now). Filled in the morning. */
+  scores: Score[];
+  /** Real dividends only: a stock whose uiMultiplier rose since bedtime, for stocks Tobi holds. */
+  dividends: Dividend[];
 };
+
+/** Change since purchase: the same USDC buys fewer tokens now if the price went up. */
+async function scoresFor(evs: DemoEvent[]): Promise<Score[]> {
+  const bought = evs.filter((e) => (e.kind === "pitch" || e.kind === "gift") && e.status === "confirmed" && e.tokens_raw && e.ticker);
+  const out = await Promise.all(
+    bought.map(async (e) => {
+      try {
+        const paid = BigInt(e.usdc_micro) + BigInt(e.match_micro ?? 0);
+        const { quoted } = await quoteMinOut(e.ticker as Ticker, paid);
+        if (quoted === 0n) return null;
+        const changePct = (Number(BigInt(e.tokens_raw!)) / Number(quoted) - 1) * 100;
+        return { eventId: e.id, ticker: e.ticker as Ticker, changePct: Math.round(changePct * 100) / 100 };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return out.filter((x): x is Score => x !== null);
+}
+
+function dividendsFor(session: DemoSession, holdings: Holdings | null): Dividend[] {
+  const before = session.multipliers;
+  if (!holdings || !before) return [];
+  return holdings.stocks
+    .filter((s) => s.raw !== "0" && before[s.ticker] && BigInt(s.multiplier) > BigInt(before[s.ticker]))
+    .map((s) => {
+      const was = (BigInt(s.raw) * BigInt(before[s.ticker])) / 10n ** 18n;
+      const now = (BigInt(s.raw) * BigInt(s.multiplier)) / 10n ** 18n;
+      return { ticker: s.ticker, extraShares: Number(now - was) / 1e8 };
+    });
+}
+
+const VOICE_BUCKET = "voice-notes";
+
+async function voiceUrls(evs: DemoEvent[]) {
+  const map = new Map<number, string>();
+  const withVoice = evs.filter((e) => e.voice_path);
+  if (!withVoice.length) return map;
+  const { data } = await db().storage.from(VOICE_BUCKET).createSignedUrls(withVoice.map((e) => e.voice_path!), 3600);
+  withVoice.forEach((e, i) => {
+    const url = data?.[i]?.signedUrl;
+    if (url) map.set(e.id, url);
+  });
+  return map;
+}
 
 export async function state(session: DemoSession): Promise<DemoState> {
   const [evs, holdings] = await Promise.all([events(session.id), kidHoldings(session.kid_id as Hash).catch(() => null)]);
+  const [scores, voices] = await Promise.all([
+    session.morning ? scoresFor(evs) : Promise.resolve([] as Score[]),
+    voiceUrls(evs).catch(() => new Map<number, string>()),
+  ]);
   return {
     session: { id: session.id, virtualNow: session.virtual_now, morning: session.morning },
-    events: evs.map((e) => ({ ...e, txUrl: e.tx_hash ? txUrl(e.tx_hash) : null })),
+    events: evs.map((e) => ({ ...e, txUrl: e.tx_hash ? txUrl(e.tx_hash) : null, voiceUrl: voices.get(e.id) ?? null })),
     holdings,
+    scores,
+    dividends: dividendsFor(session, holdings),
   };
 }
 
@@ -156,11 +216,15 @@ export async function createPitch(session: DemoSession, ticker: Ticker, why: str
 
 // ---------------------------------------------------------------- parent: approve
 
-export async function approvePitch(session: DemoSession, eventId: number) {
+export const MATCH_CHOICES = [0, 25, 50, 100];
+
+export async function approvePitch(session: DemoSession, eventId: number, matchPct = 0) {
+  if (!MATCH_CHOICES.includes(matchPct)) throw new DemoError("Pick a match of 0%, 25%, 50% or 100%.");
   const first = (await events(session.id)).find((e) => e.kind === "allowance");
   if (first?.status === "sending") throw new DemoError("Tobi's allowance is still landing on Base. Try again in a few seconds.", 409);
   if (first?.status === "failed") throw new DemoError("Tobi's allowance didn't land, so there's nothing to spend. Tap Reset demo.", 409);
-  await assertCanSpend(session, config.demo.pitchMicro);
+  const matchBps = BigInt(matchPct * 100);
+  await assertCanSpend(session, config.demo.pitchMicro + (config.demo.pitchMicro * matchBps) / 10_000n);
   // Claim the pitch atomically so a double tap can never buy twice.
   const { data: claimed } = await db()
     .from("demo_events")
@@ -173,10 +237,17 @@ export async function approvePitch(session: DemoSession, eventId: number) {
   const pitch = claimed?.[0] as DemoEvent | undefined;
   if (!pitch) throw new DemoError("This pitch was already answered.");
   try {
-    const { hash, tokensOut } = await pitchBuy(session.kid_id as Hash, pitch.ticker as Ticker, BigInt(pitch.usdc_micro));
+    const { hash, tokensOut, matchUsdc } = await pitchBuy(session.kid_id as Hash, pitch.ticker as Ticker, BigInt(pitch.usdc_micro), matchBps);
     await db()
       .from("demo_events")
-      .update({ status: "confirmed", tx_hash: hash, tokens_raw: tokensOut.toString(), executed_at: new Date().toISOString() })
+      .update({
+        status: "confirmed",
+        tx_hash: hash,
+        tokens_raw: tokensOut.toString(),
+        match_micro: Number(matchUsdc),
+        match_pct: matchPct,
+        executed_at: new Date().toISOString(),
+      })
       .eq("id", pitch.id);
   } catch (err) {
     await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", pitch.id);
@@ -258,16 +329,46 @@ export async function skipToMorning(session: DemoSession) {
 
 // ---------------------------------------------------------------- thank-you
 
-export async function thankYou(session: DemoSession, giftId: number, text: string) {
+const MAX_VOICE_BYTES = 1_000_000; // about 30 seconds of compressed audio, with room to spare
+const VOICE_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/aac"];
+
+async function ensureVoiceBucket() {
+  const { data } = await db().storage.getBucket(VOICE_BUCKET);
+  if (data) return;
+  // Private bucket: notes are only ever served through short-lived signed links.
+  await db().storage.createBucket(VOICE_BUCKET, { public: false, fileSizeLimit: MAX_VOICE_BYTES, allowedMimeTypes: VOICE_TYPES });
+}
+
+export async function thankYou(session: DemoSession, giftId: number, text: string, voice?: Blob) {
   const msg = text.trim();
-  if (!msg) throw new DemoError("Write a short thank-you.");
+  if (!msg && !voice) throw new DemoError("Write a short thank-you or record a voice note.");
+  const voiceType = voice?.type.split(";")[0] ?? "";
+  if (voice) {
+    if (!VOICE_TYPES.includes(voiceType)) throw new DemoError("That recording format isn't supported. Try a written thank-you.");
+    if (voice.size > MAX_VOICE_BYTES) throw new DemoError("Keep the voice note under 30 seconds.");
+  }
   const evs = await events(session.id);
   const gift = evs.find((e) => e.id === giftId && e.kind === "gift" && e.status === "confirmed");
   if (!gift) throw new DemoError("That gift hasn't arrived yet.");
   if (evs.some((e) => e.kind === "thank_you" && e.ref_event_id === giftId)) throw new DemoError("Tobi already said thank you.");
+  let voicePath: string | null = null;
+  if (voice) {
+    await ensureVoiceBucket();
+    const ext = { "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/aac": "aac" }[voiceType] ?? "webm";
+    voicePath = `demo/${session.id}/${giftId}.${ext}`;
+    const { error: upErr } = await db().storage.from(VOICE_BUCKET).upload(voicePath, voice, { contentType: voiceType, upsert: true });
+    if (upErr) throw new DemoError("The voice note didn't upload. Please try again or write one instead.", 503);
+  }
   const { error } = await db()
     .from("demo_events")
-    .insert({ session_id: session.id, kind: "thank_you", status: "confirmed", message: msg.slice(0, 280), ref_event_id: giftId });
+    .insert({
+      session_id: session.id,
+      kind: "thank_you",
+      status: "confirmed",
+      message: msg.slice(0, 280) || null,
+      voice_path: voicePath,
+      ref_event_id: giftId,
+    });
   if (error) throw error;
 }
 

@@ -8,6 +8,7 @@ create table if not exists demo_sessions (
   virtual_now timestamptz not null,     -- the session's simulated clock (Lagos night -> morning)
   morning boolean not null default false,
   ip_hash text not null,
+  multipliers jsonb,                    -- each stock's uiMultiplier at bedtime (dividend detection)
   created_at timestamptz not null default now()
 );
 
@@ -28,6 +29,9 @@ create table if not exists demo_events (
   tx_hash text,
   error text,
   ref_event_id bigint references demo_events(id) on delete cascade, -- thank_you -> the gift it thanks
+  match_micro bigint not null default 0, -- parent match on a pitch, from the family pool
+  match_pct int not null default 0,
+  voice_path text,                       -- voice thank-you in the private voice-notes bucket
   created_at timestamptz not null default now(),
   executed_at timestamptz
 );

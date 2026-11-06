@@ -18,14 +18,28 @@ type Ev = {
   occasion: string | null;
   message: string | null;
   ref_event_id: number | null;
+  coach_q: string | null;
+  coach_a: string | null;
+  match_micro: number;
+  match_pct: number;
   txUrl: string | null;
+  voiceUrl: string | null;
   created_at: string;
 };
 type State = {
   session: { id: string; virtualNow: string; morning: boolean };
   events: Ev[];
   holdings: { usdcMicro: string; stocks: { ticker: Ticker; raw: string; shares: number }[] } | null;
+  scores: { eventId: number; ticker: Ticker; changePct: number }[];
+  dividends: { ticker: Ticker; extraShares: number }[];
 };
+type Band = "6-9" | "10-13" | "14-17";
+const BANDS: { id: Band; label: string }[] = [
+  { id: "6-9", label: "6–9" },
+  { id: "10-13", label: "10–13" },
+  { id: "14-17", label: "14–17" },
+];
+const TOBI_BAND: Band = "10-13"; // Tobi is 11
 type ReplayItem = { kind: string; company: string | null; usdc_micro: number; tokens_raw: string | null; gifter_name: string | null; txUrl: string; executed_at: string };
 type Card = { whatItDoes: string; howItMakesMoney: string; oneThingToWatch: string };
 type Role = "kid" | "parent" | "relative";
@@ -46,7 +60,13 @@ const clock = (iso: string, offsetH: number) => {
 };
 
 async function api<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/demo/${path}`, body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const init: RequestInit =
+    body === undefined
+      ? { cache: "no-store" }
+      : body instanceof FormData
+        ? { method: "POST", body }
+        : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+  const res = await fetch(`/api/demo/${path}`, init);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
   return json as T;
@@ -154,7 +174,20 @@ export default function DemoApp() {
         {role === "kid" &&
           (kidUnlocked ? (
             morning ? (
-              <MorningReport state={state} busy={!!busy} onThank={(giftId, text) => run("Sending your thank-you…", () => api("thank-you", { giftId, text }))} />
+              <MorningReport
+                state={state}
+                busy={!!busy}
+                onThank={(giftId, text, voice) =>
+                  run("Sending your thank-you…", () => {
+                    if (!voice) return api("thank-you", { giftId, text });
+                    const form = new FormData();
+                    form.set("giftId", String(giftId));
+                    form.set("text", text);
+                    form.set("voice", voice, "thank-you");
+                    return api("thank-you", form);
+                  })
+                }
+              />
             ) : (
               <KidNight state={state} busy={!!busy} onPitch={(p) => run("Sending your pitch to Mum…", () => api("pitch", p))} />
             )
@@ -162,7 +195,7 @@ export default function DemoApp() {
             <PinPad morning={morning} onUnlock={() => setKidUnlocked(true)} />
           ))}
         {role === "parent" && (
-          <ParentView state={state} busy={!!busy} onApprove={(eventId) => run("Buying real shares on Base…", () => api("approve", { eventId }))} />
+          <ParentView state={state} busy={!!busy} onApprove={(eventId, matchPct) => run("Buying real shares on Base…", () => api("approve", { eventId, matchPct }))} />
         )}
         {role === "relative" && (
           <RelativeView state={state} busy={!!busy} onGift={(g) => run("Wrapping your gift…", () => api("gift", g))} />
@@ -244,10 +277,11 @@ function Welcome({ onStart, busy, error }: { onStart: () => void; busy: string |
         happen with real transactions on Base.
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-moon-dim">
-        <li>As Tobi, pitch a company to Mum.</li>
-        <li>As Mum, approve it. Real shares are bought.</li>
+        <li>As Tobi, pitch a company to Mum and answer the coach&apos;s question.</li>
         <li>As Aunty Funmi, send a gift while Tobi sleeps.</li>
-        <li>Skip to morning and read Tobi&apos;s Morning Report.</li>
+        <li>Skip to morning. The night shift delivers the gift and the allowance.</li>
+        <li>As Mum, approve the pitch at breakfast and choose a match. Real shares are bought.</li>
+        <li>Read Tobi&apos;s Morning Report, send a voice thank-you and save it as an image.</li>
       </ol>
       {error && (
         <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
@@ -333,20 +367,45 @@ function PinPad({ morning, onUnlock }: { morning: boolean; onUnlock: () => void 
   );
 }
 
-function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPitch: (p: { ticker: Ticker; why: string }) => void }) {
+type PitchInput = { ticker: Ticker; why: string; coachQ?: string; coachA?: string };
+
+function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPitch: (p: PitchInput) => void }) {
   const [pick, setPick] = useState<Ticker | null>(null);
   const [why, setWhy] = useState("");
-  const [cards, setCards] = useState<Partial<Record<Ticker, Card & { source?: string }>>>({});
-  const card = pick ? cards[pick] ?? null : null;
+  const [band, setBand] = useState<Band>(TOBI_BAND);
+  const [cards, setCards] = useState<Partial<Record<string, Card & { source?: string }>>>({});
+  const [coach, setCoach] = useState<{ question: string; source: string } | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const cardKey = pick ? `${pick}:${band}` : "";
+  const card = pick ? cards[cardKey] ?? null : null;
   const pitch = state.events.find((e) => e.kind === "pitch" && e.status !== "failed");
 
   useEffect(() => {
-    if (!pick || cards[pick]) return;
-    fetch(`/api/ai/explain?ticker=${pick}&band=10-13`)
+    if (!pick || cards[cardKey]) return;
+    fetch(`/api/ai/explain?ticker=${pick}&band=${band}`)
       .then((r) => r.json())
-      .then((j) => j.card && setCards((c) => ({ ...c, [pick]: { ...j.card, source: j.source } })))
+      .then((j) => j.card && setCards((c) => ({ ...c, [cardKey]: { ...j.card, source: j.source } })))
       .catch(() => {});
-  }, [pick, cards]);
+  }, [pick, band, cardKey, cards]);
+
+  const askCoach = async () => {
+    if (!pick || !why.trim()) return;
+    setCoachLoading(true);
+    try {
+      const res = await fetch("/api/ai/coach", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ticker: pick, band: TOBI_BAND, why }),
+      });
+      const j = await res.json();
+      setCoach(j.question ? { question: j.question, source: j.source } : { question: `What could go wrong for ${COMPANIES[pick].name}?`, source: "fallback" });
+    } catch {
+      setCoach({ question: `What could go wrong for ${COMPANIES[pick].name}?`, source: "fallback" });
+    } finally {
+      setCoachLoading(false);
+    }
+  };
 
   return (
     <section className="flex flex-col gap-4">
@@ -368,7 +427,11 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                 key={t}
                 type="button"
                 aria-pressed={pick === t}
-                onClick={() => setPick(t)}
+                onClick={() => {
+                  setPick(t);
+                  setCoach(null);
+                  setAnswer("");
+                }}
                 className={`rounded-xl p-4 text-left ${pick === t ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}
               >
                 <span className="text-2xl" aria-hidden>
@@ -380,6 +443,21 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
           </div>
           {pick && (
             <div className="mt-4 rounded-xl bg-night-800 p-4 text-sm">
+              <div role="group" aria-label="Card written for ages" className="mb-3 flex flex-wrap items-center gap-1 text-xs">
+                <span className="mr-1 text-moon-dim">Written for ages</span>
+                {BANDS.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    aria-pressed={band === b.id}
+                    onClick={() => setBand(b.id)}
+                    className={`rounded-full px-2 py-1 ${band === b.id ? "bg-star font-semibold text-night-950" : "bg-night-700"}`}
+                  >
+                    {b.label}
+                    {b.id === TOBI_BAND ? " (Tobi)" : ""}
+                  </button>
+                ))}
+              </div>
               {card ? (
                 <dl className="space-y-2">
                   <div>
@@ -395,8 +473,8 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                     <dd>{card.oneThingToWatch}</dd>
                   </div>
                   <p className="pt-1 text-xs text-moon-dim">
-                    {card.source === "ai" ? "Written live by Claude (AI) for ages 10–13." : "Written with Claude (AI) while building Allowance, for ages 10–13."} Learning only,
-                    not financial advice.
+                    {card.source === "ai" ? "Written live by Claude (AI)" : "Written with Claude (AI) while building Allowance,"} for ages{" "}
+                    {BANDS.find((b) => b.id === band)!.label}. Learning only, not financial advice.
                   </p>
                 </dl>
               ) : (
@@ -409,7 +487,8 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
               className="mt-4 flex flex-col gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                onPitch({ ticker: pick, why });
+                if (!coach) void askCoach();
+                else onPitch({ ticker: pick, why, coachQ: coach.question, coachA: answer });
               }}
             >
               <label htmlFor="why" className="font-semibold">
@@ -420,14 +499,43 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                 maxLength={280}
                 rows={3}
                 value={why}
+                readOnly={!!coach}
                 onChange={(e) => setWhy(e.target.value)}
                 placeholder={pick === "AAPL" ? "Everyone in my class wants AirPods…" : "Their chips make my games look amazing…"}
-                className="rounded-xl bg-white p-3 text-ink"
+                className="rounded-xl bg-white p-3 text-ink read-only:opacity-80"
               />
               <p className="text-right text-xs text-moon-dim">{why.length}/280</p>
-              <button type="submit" disabled={busy || !why.trim()} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
-                Send pitch to Mum ($0.01)
-              </button>
+              {coach && (
+                <div className="flex flex-col gap-2 rounded-xl bg-night-800 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-star">🧑‍🏫 Pitch coach</p>
+                  <p className="font-semibold">{coach.question}</p>
+                  <label htmlFor="coach-answer" className="sr-only">
+                    Your answer to the coach
+                  </label>
+                  <textarea
+                    id="coach-answer"
+                    maxLength={280}
+                    rows={2}
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder="Your answer goes to Mum with your pitch…"
+                    className="rounded-xl bg-white p-3 text-ink"
+                  />
+                  <p className="text-xs text-moon-dim">
+                    {coach.source === "ai" ? "Question asked live by Claude (AI)." : "Question written with Claude (AI) while building Allowance."} The coach never says
+                    what to buy.
+                  </p>
+                </div>
+              )}
+              {!coach ? (
+                <button type="submit" disabled={busy || coachLoading || !why.trim()} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+                  {coachLoading ? "The coach is thinking…" : "Next: one question from the coach"}
+                </button>
+              ) : (
+                <button type="submit" disabled={busy || !answer.trim()} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+                  Send pitch to Mum ($0.01)
+                </button>
+              )}
             </form>
           )}
         </div>
@@ -460,9 +568,12 @@ function Savings({ state }: { state: State }) {
   );
 }
 
-function ParentView({ state, busy, onApprove }: { state: State; busy: boolean; onApprove: (id: number) => void }) {
+const MATCHES = [0, 25, 50, 100];
+
+function ParentView({ state, busy, onApprove }: { state: State; busy: boolean; onApprove: (id: number, matchPct: number) => void }) {
   const pitches = state.events.filter((e) => e.kind === "pitch");
   const morning = state.session.morning;
+  const [match, setMatch] = useState(50);
   return (
     <section className={`flex flex-col gap-3 rounded-2xl p-5 ${morning ? "bg-white" : "bg-night-900"}`}>
       <h2 className="text-lg font-semibold">Mum&apos;s inbox</h2>
@@ -473,19 +584,46 @@ function ParentView({ state, busy, onApprove }: { state: State; busy: boolean; o
             Tobi wants to buy {usd(p.usdc_micro)} of {COMPANIES[p.ticker!].name} {COMPANIES[p.ticker!].emoji}
           </p>
           <p className="mt-1 opacity-90">“{p.why}”</p>
+          {p.coach_q && (
+            <div className={`mt-2 rounded-lg p-2 text-sm ${morning ? "bg-white" : "bg-night-700"}`}>
+              <p className="opacity-80">🧑‍🏫 Coach asked: {p.coach_q}</p>
+              {p.coach_a && <p>Tobi answered: “{p.coach_a}”</p>}
+            </div>
+          )}
           {p.status === "pending" && (
             <>
+              <fieldset className="mt-3">
+                <legend className="text-sm font-semibold">Match Tobi&apos;s investing</legend>
+                <div className="mt-1 grid grid-cols-4 gap-1">
+                  {MATCHES.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={match === m}
+                      onClick={() => setMatch(m)}
+                      className={`rounded-lg px-2 py-2 text-sm ${match === m ? "bg-star font-semibold text-night-950" : morning ? "bg-white" : "bg-night-700"}`}
+                    >
+                      {m}%
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
               <p className="mt-3 text-xs opacity-80">
-                Approving buys {usd(p.usdc_micro)} of a real Coinbase tokenized {COMPANIES[p.ticker!].name} share on Base, paid from Tobi&apos;s savings, held in your family
-                vault.
+                Approving buys {usd(p.usdc_micro + Math.floor((p.usdc_micro * match) / 100))} of a real Coinbase tokenized {COMPANIES[p.ticker!].name} share on Base:{" "}
+                {usd(p.usdc_micro)} from Tobi&apos;s savings
+                {match > 0 ? ` + ${usd(Math.floor((p.usdc_micro * match) / 100))} from you (${match}% match)` : ""}. Held in your family vault.
               </p>
-              <button type="button" disabled={busy} onClick={() => onApprove(p.id)} className="mt-3 w-full rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+              <button type="button" disabled={busy} onClick={() => onApprove(p.id, match)} className="mt-3 w-full rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
                 ✅ Approve (Demo approval)
               </button>
               <p className="mt-1 text-xs opacity-70">In the real app this step asks for Face ID or your fingerprint.</p>
             </>
           )}
-          {p.status === "confirmed" && <p className="mt-2 text-sm">Approved. Tobi now owns {shares(p.tokens_raw)} shares.</p>}
+          {p.status === "confirmed" && (
+            <p className="mt-2 text-sm">
+              Approved{p.match_pct > 0 ? ` with a ${p.match_pct}% match` : ""}. Tobi now owns {shares(p.tokens_raw)} shares.
+            </p>
+          )}
           {p.status === "failed" && <p className="mt-2 text-sm">That buy didn&apos;t go through, and no money moved.</p>}
           {p.txUrl && <TxLink href={p.txUrl} />}
         </article>
@@ -518,9 +656,15 @@ function RelativeView({ state, busy, onGift }: { state: State; busy: boolean; on
       {!morning && <p className="text-center">It&apos;s {clock(now, 1)} in Lagos. Tobi will wake up to your gift. 🌙</p>}
 
       {thanks.map((t) => (
-        <p key={t.id} className="rounded-xl bg-sunrise-100 p-3 text-ink">
-          💌 Tobi says: “{t.message}”
-        </p>
+        <div key={t.id} className="flex flex-col gap-2 rounded-xl bg-sunrise-100 p-3 text-ink">
+          {t.message && <p>💌 Tobi says: “{t.message}”</p>}
+          {t.voiceUrl && (
+            <>
+              <p className="text-sm font-semibold">🎙️ Tobi sent you a voice note</p>
+              <audio controls src={t.voiceUrl} className="h-10 max-w-full" />
+            </>
+          )}
+        </div>
       ))}
 
       {gift ? (
@@ -579,13 +723,25 @@ function RelativeView({ state, busy, onGift }: { state: State; busy: boolean; on
   );
 }
 
-function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; onThank: (giftId: number, text: string) => void }) {
+function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; onThank: (giftId: number, text: string, voice: Blob | null) => void }) {
   const [text, setText] = useState("Thank you Aunty Funmi! I love it 🧡");
+  const [voice, setVoice] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
   const gifts = state.events.filter((e) => e.kind === "gift");
   const pitches = state.events.filter((e) => e.kind === "pitch" && e.status === "confirmed");
   const waiting = state.events.find((e) => e.kind === "pitch" && (e.status === "pending" || e.status === "sending"));
   const allowance = [...state.events].reverse().find((e) => e.kind === "allowance" && e.status === "confirmed");
   const thanked = new Set(state.events.filter((e) => e.kind === "thank_you").map((e) => e.ref_event_id));
+  const scoreOf = (id: number) => state.scores.find((s) => s.eventId === id);
+
+  const save = async () => {
+    setSaving("Making your card…");
+    try {
+      setSaving(await saveReportCard(state));
+    } catch {
+      setSaving("Couldn't make the image on this device.");
+    }
+  };
 
   return (
     <section className="flex flex-col gap-3">
@@ -605,21 +761,23 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
               <p className="text-sm opacity-80">
                 {g.occasion}: “{g.message}” · {shares(g.tokens_raw)} shares
               </p>
+              <Score score={scoreOf(g.id)} label={`Aunty Funmi's ${COMPANIES[g.ticker!].name} gift`} />
               {g.txUrl && <TxLink href={g.txUrl} />}
               {!thanked.has(g.id) ? (
                 <form
                   className="mt-3 flex flex-col gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    onThank(g.id, text);
+                    onThank(g.id, text, voice);
                   }}
                 >
                   <label htmlFor={`ty-${g.id}`} className="text-sm font-semibold">
                     Send a thank-you to London
                   </label>
                   <input id={`ty-${g.id}`} value={text} maxLength={280} onChange={(e) => setText(e.target.value)} className="rounded-xl border border-sunrise-300 p-3" />
-                  <button type="submit" disabled={busy} className="rounded-xl bg-sunrise-500 px-4 py-3 font-semibold text-white disabled:opacity-60">
-                    💌 Send thank-you
+                  <VoiceRecorder onChange={setVoice} />
+                  <button type="submit" disabled={busy || (!text.trim() && !voice)} className="rounded-xl bg-sunrise-500 px-4 py-3 font-semibold text-white disabled:opacity-60">
+                    💌 Send thank-you{voice ? " with voice note" : ""}
                   </button>
                 </form>
               ) : (
@@ -635,7 +793,13 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
       {pitches.map((p) => (
         <article key={p.id} className="rounded-2xl bg-white p-4">
           <p className="text-lg font-semibold">✅ Mum approved your {COMPANIES[p.ticker!].name} pitch!</p>
+          {p.match_pct > 0 && (
+            <p className="text-sm font-semibold text-sunrise-700">
+              💛 Mum matched {p.match_pct}%: +{usd(p.match_micro)} on top of your {usd(p.usdc_micro)}.
+            </p>
+          )}
           <p className="text-sm opacity-80">You own {shares(p.tokens_raw)} shares of {COMPANIES[p.ticker!].name}.</p>
+          <Score score={scoreOf(p.id)} label={`Your ${COMPANIES[p.ticker!].name} pitch`} />
           {p.txUrl && <TxLink href={p.txUrl} />}
         </article>
       ))}
@@ -654,10 +818,238 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
         </article>
       )}
 
+      <article className="rounded-2xl bg-white p-4">
+        {state.dividends.length > 0 ? (
+          state.dividends.map((d) => (
+            <p key={d.ticker} className="text-lg font-semibold">
+              💸 {COMPANIES[d.ticker].name} paid you overnight! +{d.extraShares.toFixed(8).replace(/0+$/, "")} shares.
+            </p>
+          ))
+        ) : (
+          <p className="text-sm opacity-80">
+            💸 Dividends: none of your companies paid one last night. When one does, the token&apos;s multiplier goes up and it shows here. We never make one up.
+          </p>
+        )}
+      </article>
+
       {gifts.length === 0 && pitches.length === 0 && <p className="rounded-2xl bg-white p-4">A quiet night. Your allowance still landed!</p>}
 
       <Savings state={state} />
+
+      <div className="flex flex-col gap-1">
+        <button type="button" onClick={save} className="rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon">
+          📸 Save my Morning Report as an image
+        </button>
+        {saving && <p className="text-center text-sm opacity-80">{saving}</p>}
+      </div>
+
+      <Leaderboard state={state} />
+
       <p className="text-xs opacity-70">Shares are real Coinbase tokenized stocks on Base, held in your family vault. Learning only, not financial advice.</p>
+    </section>
+  );
+}
+
+function Score({ score, label }: { score?: { changePct: number }; label: string }) {
+  if (!score) return null;
+  const pct = score.changePct;
+  const flat = Math.abs(pct) < 0.05;
+  return (
+    <p className="mt-1 text-sm">
+      📈 {label}: {flat ? "about the same" : `${pct > 0 ? "up" : "down"} ${Math.abs(pct).toFixed(2)}%`} since you got it.
+      <span className="opacity-70"> (Live price on Base. Prices go up and down.)</span>
+    </p>
+  );
+}
+
+const MAX_VOICE_SECONDS = 30;
+
+function VoiceRecorder({ onChange }: { onChange: (b: Blob | null) => void }) {
+  const [rec, setRec] = useState<MediaRecorder | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [secs, setSecs] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rec) return;
+    const t = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [rec]);
+
+  useEffect(() => {
+    if (rec && secs >= MAX_VOICE_SECONDS) rec.stop();
+  }, [rec, secs]);
+
+  const start = async () => {
+    setErr(null);
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setErr("Voice notes aren't supported on this browser. A written thank-you works too.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ["audio/webm", "audio/mp4", "audio/ogg"].find((t) => MediaRecorder.isTypeSupported(t));
+      const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks: Blob[] = [];
+      r.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      r.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: r.mimeType.split(";")[0] || "audio/webm" });
+        setUrl(URL.createObjectURL(blob));
+        onChange(blob);
+        setRec(null);
+      };
+      setSecs(0);
+      r.start();
+      setRec(r);
+    } catch {
+      setErr("Couldn't use the microphone. A written thank-you works too.");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-sunrise-50 p-3 text-sm">
+      {rec ? (
+        <button type="button" onClick={() => rec.stop()} className="rounded-lg bg-red-600 px-3 py-2 font-semibold text-white">
+          ⏹ Stop recording ({MAX_VOICE_SECONDS - secs}s left)
+        </button>
+      ) : url ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <audio controls src={url} className="h-10 max-w-full" />
+          <button
+            type="button"
+            onClick={() => {
+              setUrl(null);
+              onChange(null);
+            }}
+            className="underline"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <button type="button" onClick={start} className="rounded-lg bg-white px-3 py-2 font-semibold">
+          🎙️ Record a voice note (up to {MAX_VOICE_SECONDS}s)
+        </button>
+      )}
+      {err && <p>{err}</p>}
+    </div>
+  );
+}
+
+/** Draws the Morning Report as a 1080x1350 image, then shares it (phones) or downloads it. */
+async function saveReportCard(state: State): Promise<string> {
+  const W = 1080;
+  const H = 1350;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "#ffbf80");
+  grad.addColorStop(1, "#fff8ef");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+
+  const font = getComputedStyle(document.body).fontFamily || "sans-serif";
+  const line = (text: string, y: number, size: number, weight = 400, color = "#2a1a10") => {
+    g.fillStyle = color;
+    g.font = `${weight} ${size}px ${font}`;
+    // Simple word wrap.
+    const words = text.split(" ");
+    let cur = "";
+    let yy = y;
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (g.measureText(next).width > W - 160 && cur) {
+        g.fillText(cur, 80, yy);
+        cur = w;
+        yy += size * 1.3;
+      } else cur = next;
+    }
+    if (cur) g.fillText(cur, 80, yy);
+    return yy + size * 1.6;
+  };
+
+  let y = line("☀️ GOOD MORNING, TOBI", 150, 40, 700, "#b4461a");
+  y = line("My Morning Report", y + 10, 84, 800);
+  y += 20;
+  const gift = state.events.find((e) => e.kind === "gift" && e.status === "confirmed");
+  if (gift) y = line(`🎁 Aunty Funmi sent me a slice of ${COMPANIES[gift.ticker!].name} from London while I slept.`, y, 46, 600);
+  for (const p of state.events.filter((e) => e.kind === "pitch" && e.status === "confirmed")) {
+    y = line(`✅ Mum approved my ${COMPANIES[p.ticker!].name} pitch${p.match_pct ? ` and matched ${p.match_pct}%` : ""}.`, y, 46, 600);
+  }
+  const allowance = state.events.find((e) => e.kind === "allowance" && e.status === "confirmed");
+  if (allowance) y = line(`🌙 My allowance landed at midnight.`, y, 46, 600);
+  for (const d of state.dividends) y = line(`💸 ${COMPANIES[d.ticker].name} paid me a dividend overnight!`, y, 46, 600);
+  const owned = state.holdings?.stocks.filter((s) => s.raw !== "0") ?? [];
+  if (owned.length) {
+    y += 10;
+    y = line("I own real pieces of:", y, 40, 700, "#b4461a");
+    for (const s of owned) y = line(`${COMPANIES[s.ticker].emoji} ${COMPANIES[s.ticker].name}`, y, 52, 700);
+  }
+  g.fillStyle = "#2a1a10";
+  g.font = `600 34px ${font}`;
+  g.fillText("Allowance · the family money app that works the night shift", 80, H - 120);
+  g.font = `400 28px ${font}`;
+  g.fillText("Real tokenized stocks on Base. Learning only, not financial advice.", 80, H - 70);
+
+  const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("no blob"))), "image/png"));
+  const file = new File([blob], "tobi-morning-report.png", { type: "image/png" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Tobi's Morning Report", text: "Look what arrived while I slept!" });
+      return "Shared! 💌";
+    } catch {
+      // User closed the share sheet; fall back to a download.
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return "Saved to your downloads. Send it to Grandma on WhatsApp!";
+}
+
+/** Ranks by learning (pitches, approvals, thank-yous), never by returns. */
+function Leaderboard({ state }: { state: State }) {
+  const ev = state.events;
+  const tobi = {
+    name: "Tobi",
+    face: "👦🏾",
+    pitches: ev.filter((e) => e.kind === "pitch" && e.status !== "failed").length,
+    approvals: ev.filter((e) => e.kind === "pitch" && e.status === "confirmed").length,
+    thanks: ev.filter((e) => e.kind === "thank_you").length,
+    live: true,
+  };
+  // Kemi and Dayo are fictional members of the demo family; their counts are fixed sample numbers.
+  const rows = [
+    tobi,
+    { name: "Kemi (sister, 8)", face: "👧🏾", pitches: 1, approvals: 1, thanks: 1, live: false },
+    { name: "Dayo (cousin, 15)", face: "🧑🏾", pitches: 2, approvals: 0, thanks: 1, live: false },
+  ]
+    .map((r) => ({ ...r, points: r.pitches + r.approvals * 2 + r.thanks }))
+    .sort((a, b) => b.points - a.points);
+  return (
+    <section className="rounded-2xl bg-white p-4" aria-labelledby="lb">
+      <h3 id="lb" className="text-lg font-semibold">
+        🏆 Family leaderboard
+      </h3>
+      <p className="text-xs opacity-70">Points for pitches made (1), approvals won (2) and thank-yous sent (1). Never for how much money anyone made.</p>
+      <ol className="mt-2 flex flex-col gap-1">
+        {rows.map((r, i) => (
+          <li key={r.name} className={`flex items-center justify-between rounded-lg px-2 py-1 ${r.live ? "bg-sunrise-100 font-semibold" : ""}`}>
+            <span>
+              {i + 1}. {r.face} {r.name}
+            </span>
+            <span className="text-sm">
+              {r.points} pts · {r.pitches} pitch{r.pitches === 1 ? "" : "es"} · {r.approvals} approved · {r.thanks} thanks
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-xs opacity-70">Kemi and Dayo are demo family members with sample numbers. Tobi&apos;s are live from this demo.</p>
     </section>
   );
 }
