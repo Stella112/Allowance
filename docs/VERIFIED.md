@@ -70,3 +70,14 @@ One line per fact: **status**, the fact, its source, and the date checked. Addre
 - UNVERIFIED: the current Anthropic model ID. To check against Anthropic's docs before Phase 3.
 - VERIFIED: FamilyVault v2 demo vault 0xaB7A0f6ea2fb8b81096dbBe3c055101b258689F2 passes the TRANSFER_RECEIVER policy for AAPLc and NVDAc (`canReceive` returned true on mainnet). Source: on-chain read. Checked 2026-11-06.
 
+## Coinbase Developer Platform embedded wallets (checked 2026-11-06)
+
+Sources: https://docs.cdp.coinbase.com/embedded-wallets/quickstart, https://docs.cdp.coinbase.com/embedded-wallets/welcome, https://docs.cdp.coinbase.com/embedded-wallets/domains, https://docs.cdp.coinbase.com/wallets/authentication/implementation-guide.md
+
+- VERIFIED: needs a free CDP Portal account and project; "Business verification is not required for non-custodial wallets."
+- VERIFIED: browser sign-in with an email one-time code needs only the project ID (`projectId`). Email OTP is the default method: a 6-digit code that expires in 10 minutes.
+- VERIFIED: origins must be allowlisted at https://portal.cdp.coinbase.com/wallets/non-custodial/clients with "Add domain". The format is `scheme://host:port`, `http://localhost:3000` is allowed for development, the limit is 50 per project, and changes take effect immediately. Docs warn not to add localhost to production projects.
+- VERIFIED: checking a user's sign-in on the server uses `@coinbase/cdp-sdk` `CdpClient({ apiKeyId, apiKeySecret })` and `endUser.validateAccessToken({ accessToken })`. This needs a secret API key (`CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`) from https://portal.cdp.coinbase.com/api-keys/secret.
+- VERIFIED: packages `@coinbase/cdp-react`, `@coinbase/cdp-core` and `@coinbase/cdp-hooks`; provider `CDPReactProvider`; component `AuthButton`; hooks `useIsSignedIn`, `useEvmAddress`, `useGetAccessToken` and `useSignOut`. Config `ethereum.createOnLogin: "eoa" | "smart"`. Requires Node 22+. Exact versions are not pinned yet.
+- UNVERIFIED: gas sponsorship (paymaster) for embedded wallets on Base mainnet. The pages read don't mention it. Until it's verified, plan for the parent's wallet to need a little ETH for its own transactions (create vault, deposit), and for the app's operator wallet to keep paying for allowances, pitch buys and the night shift.
+
