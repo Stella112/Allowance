@@ -126,6 +126,8 @@ export default function DemoApp() {
           Demo family, real Base transactions, tiny amounts paid by Allowance.
         </p>
 
+        <StepGuide state={state} role={role} onGo={(r) => setRole(r)} onSkip={skip} busy={!!busy} />
+
         <RoleSwitcher role={role} morning={morning} onPick={(r) => setRole(r)} />
 
         {error && (
@@ -167,6 +169,7 @@ export default function DemoApp() {
               🌅 Skip to morning{queuedGift ? " (1 gift waiting)" : ""}
             </button>
           )}
+          {!morning && !queuedGift && <p className="text-center text-sm text-moon-dim">Tip: send Aunty Funmi&apos;s gift first, so Tobi wakes up to it.</p>}
           <button type="button" onClick={start} disabled={!!busy} className="text-sm underline disabled:opacity-60">
             Reset demo
           </button>
@@ -177,6 +180,47 @@ export default function DemoApp() {
 }
 
 // ------------------------------------------------------------------ pieces
+
+function StepGuide({ state, role, onGo, onSkip, busy }: { state: State; role: Role; onGo: (r: Role) => void; onSkip: () => void; busy: boolean }) {
+  const ev = state.events;
+  const morning = state.session.morning;
+  const pitch = ev.find((e) => e.kind === "pitch" && e.status !== "failed");
+  const steps: { label: string; done: boolean; role?: Role; who?: string }[] = [
+    { label: "Tobi pitches a company at bedtime", done: !!pitch, role: "kid", who: "Tobi" },
+    { label: "Aunty Funmi sends a gift from London", done: ev.some((e) => e.kind === "gift"), role: "relative", who: "Aunty Funmi" },
+    { label: "Skip to morning", done: morning },
+    { label: "Mum approves the pitch at breakfast", done: pitch?.status === "confirmed", role: "parent", who: "Mum" },
+    { label: "Tobi reads his Morning Report and says thanks", done: ev.some((e) => e.kind === "thank_you"), role: "kid", who: "Tobi" },
+  ];
+  // Night steps can't be done after morning; skip them when choosing what's next.
+  const next = steps.findIndex((s, i) => !s.done && !(morning && i < 3));
+  return (
+    <ol aria-label="Demo steps" className={`flex flex-col gap-1 rounded-2xl p-3 text-sm ${morning ? "bg-white" : "bg-night-900"}`}>
+      {steps.map((s, i) => {
+        const missed = morning && i < 2 && !s.done;
+        const isNext = i === next;
+        return (
+          <li key={s.label} className={`flex items-center justify-between gap-2 rounded-xl px-2 py-1 ${isNext ? (morning ? "bg-sunrise-100" : "bg-night-700") : ""}`}>
+            <span className={s.done ? "line-through opacity-60" : missed ? "opacity-50" : ""}>
+              {s.done ? "✅" : i < 3 ? "🌙" : "☀️"} {i + 1}. {s.label}
+              {missed ? " (missed — Reset demo to try)" : ""}
+            </span>
+            {isNext && s.role && s.role !== role && (
+              <button type="button" onClick={() => onGo(s.role!)} className="shrink-0 rounded-lg bg-star px-3 py-1 font-semibold text-night-950">
+                Go to {s.who}
+              </button>
+            )}
+            {isNext && !s.role && (
+              <button type="button" disabled={busy} onClick={onSkip} className="shrink-0 rounded-lg bg-star px-3 py-1 font-semibold text-night-950 disabled:opacity-60">
+                Skip
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 function Welcome({ onStart, busy, error }: { onStart: () => void; busy: string | null; error: string | null }) {
   return (
@@ -526,6 +570,7 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
   const [text, setText] = useState("Thank you Aunty Funmi! I love it 🧡");
   const gifts = state.events.filter((e) => e.kind === "gift");
   const pitches = state.events.filter((e) => e.kind === "pitch" && e.status === "confirmed");
+  const waiting = state.events.find((e) => e.kind === "pitch" && (e.status === "pending" || e.status === "sending"));
   const allowance = [...state.events].reverse().find((e) => e.kind === "allowance" && e.status === "confirmed");
   const thanked = new Set(state.events.filter((e) => e.kind === "thank_you").map((e) => e.ref_event_id));
 
@@ -581,6 +626,13 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
           {p.txUrl && <TxLink href={p.txUrl} />}
         </article>
       ))}
+
+      {waiting && (
+        <article className="rounded-2xl bg-white p-4">
+          <p className="text-lg font-semibold">🕒 Your {COMPANIES[waiting.ticker!].name} pitch is waiting for Mum.</p>
+          <p className="text-sm opacity-80">She&apos;ll see it at breakfast. (Switch to Mum to approve it.)</p>
+        </article>
+      )}
 
       {allowance && (
         <article className="rounded-2xl bg-white p-4">
