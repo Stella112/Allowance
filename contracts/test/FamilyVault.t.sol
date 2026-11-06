@@ -468,4 +468,286 @@ contract FamilyVaultTest is Test {
         vm.expectRevert(FamilyVault.InvalidAddress.selector);
         vault.setTokenAllowed(USDC, TS);
     }
+
+    // ------------------------------------------------------------ v2: graduation
+
+    function _pitch(bytes32 kid, address token, uint256 amount) internal returns (uint256 out) {
+        uint256 m = _minOut(token, amount);
+        vm.prank(relayer);
+        out = vault.approvePitchBuy(kid, token, amount, 0, m, block.timestamp + 300);
+    }
+
+    function test_graduate_movesSharesAndSavingsToKidWallet() public {
+        _giveKidSavings(tobi, 3e6);
+        uint256 apple = _pitch(tobi, AAPLC, 1e6);
+        uint256 nvda = _gift(aunty, tobi, NVDAC, 5e5);
+        address tobiWallet = makeAddr("tobiAt18");
+        assertTrue(vault.canReceive(AAPLC, tobiWallet));
+
+        vm.prank(parent);
+        vault.graduate(tobi, tobiWallet);
+
+        assertEq(IERC20(AAPLC).balanceOf(tobiWallet), apple);
+        assertEq(IERC20(NVDAC).balanceOf(tobiWallet), nvda);
+        assertEq(IERC20(USDC).balanceOf(tobiWallet), 2e6); // savings left after the $1 pitch
+        assertEq(vault.kidTokens(tobi, AAPLC), 0);
+        assertEq(vault.kidTokens(tobi, NVDAC), 0);
+        assertEq(vault.kidUsdc(tobi), 0);
+        assertEq(vault.graduatedTo(tobi), tobiWallet);
+        (uint128 amount,,) = vault.allowanceOf(tobi);
+        assertEq(amount, 0);
+    }
+
+    function test_graduate_leavesOtherKidsAlone() public {
+        _giveKidSavings(tobi, 1e6);
+        uint256 adaGift = _gift(aunty, ada, AAPLC, 5e5);
+        _pitch(tobi, AAPLC, 1e6);
+        vm.prank(parent);
+        vault.graduate(tobi, makeAddr("tobiAt18"));
+        assertEq(vault.kidTokens(ada, AAPLC), adaGift);
+        assertEq(IERC20(AAPLC).balanceOf(address(vault)), adaGift);
+    }
+
+    function test_graduate_onlyOwner() public {
+        _gift(aunty, tobi, AAPLC, 5e5);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, relayer));
+        vault.graduate(tobi, relayer);
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vault.graduate(tobi, stranger);
+    }
+
+    function test_graduate_rejectsBadAddress() public {
+        vm.startPrank(parent);
+        vm.expectRevert(FamilyVault.InvalidAddress.selector);
+        vault.graduate(tobi, address(0));
+        vm.expectRevert(FamilyVault.InvalidAddress.selector);
+        vault.graduate(tobi, address(vault));
+        vm.stopPrank();
+    }
+
+    function test_graduate_rejectsWalletTheStockRulesBlock() public {
+        _gift(aunty, tobi, AAPLC, 5e5);
+        address blocked = makeAddr("blockedWallet");
+        uint64 policy = IB20Asset(AAPLC).policyId(TRANSFER_RECEIVER);
+        vm.mockCall(
+            POLICY_REGISTRY, abi.encodeCall(IPolicyRegistry.isAuthorized, (policy, blocked)), abi.encode(false)
+        );
+        assertFalse(vault.canReceive(AAPLC, blocked));
+        vm.prank(parent);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.NotEligible.selector, AAPLC, blocked));
+        vault.graduate(tobi, blocked);
+        assertEq(vault.graduatedTo(tobi), address(0)); // nothing changed
+    }
+
+    function test_graduate_closesTheKidsLedger() public {
+        _giveKidSavings(tobi, 1e6);
+        vm.prank(parent);
+        vault.graduate(tobi, makeAddr("tobiAt18"));
+
+        bytes memory graduated = abi.encodeWithSelector(FamilyVault.KidGraduated.selector, tobi);
+        vm.prank(parent);
+        vm.expectRevert(graduated);
+        vault.graduate(tobi, makeAddr("again"));
+        vm.prank(parent);
+        vm.expectRevert(graduated);
+        vault.setAllowance(tobi, 1e6, 7 days);
+        vm.prank(relayer);
+        vm.expectRevert(graduated);
+        vault.releaseAllowance(tobi);
+        vm.prank(relayer);
+        vm.expectRevert(graduated);
+        vault.approvePitchBuy(tobi, AAPLC, 1e5, 0, 1, block.timestamp + 300);
+        deal(USDC, aunty, 1e6);
+        vm.startPrank(aunty);
+        IERC20(USDC).approve(address(vault), 1e6);
+        vm.expectRevert(graduated);
+        vault.depositGift(tobi, AAPLC, 1e6, 1, block.timestamp + 300, bytes32("Aunty Funmi"));
+        vm.expectRevert(graduated);
+        vault.openGroupGift(tobi, AAPLC, 1e6);
+        vm.stopPrank();
+    }
+
+    // ------------------------------------------------------------ v2: group gifts
+
+    address uncle = makeAddr("uncleDayo");
+
+    function _chipIn(address from, uint256 id, uint256 amount) internal {
+        deal(USDC, from, IERC20(USDC).balanceOf(from) + amount);
+        vm.startPrank(from);
+        IERC20(USDC).approve(address(vault), amount);
+        vault.contributeToGroupGift(id, amount, bytes32("family"));
+        vm.stopPrank();
+    }
+
+    function _open(address organizer, uint256 target) internal returns (uint256 id) {
+        vm.prank(organizer);
+        id = vault.openGroupGift(tobi, AAPLC, target);
+    }
+
+    function test_groupGift_organizerClosesAndKidGetsShares() public {
+        uint256 id = _open(aunty, 3e6);
+        _chipIn(aunty, id, 1e6);
+        _chipIn(uncle, id, 5e5);
+        assertEq(vault.escrowUsdc(), 15e5);
+        assertEq(vault.familyUsdc(), 0); // escrow is separate from the family pool
+        uint256 m = _minOut(AAPLC, 15e5);
+        vm.prank(aunty);
+        uint256 out = vault.settleGroupGift(id, m, block.timestamp + 300);
+        assertGe(out, m);
+        assertEq(vault.kidTokens(tobi, AAPLC), out);
+        assertEq(vault.escrowUsdc(), 0);
+        (,,, FamilyVault.GroupStatus status,, uint256 raised) = vault.groupGifts(id);
+        assertEq(uint8(status), uint8(FamilyVault.GroupStatus.Settled));
+        assertEq(raised, 15e5);
+    }
+
+    function test_groupGift_ownerOrOperatorSettleOnlyAtTarget() public {
+        uint256 id = _open(aunty, 1e6);
+        _chipIn(uncle, id, 5e5);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.TargetNotReached.selector, 5e5, 1e6));
+        vault.settleGroupGift(id, 1, block.timestamp + 300);
+        vm.prank(stranger);
+        vm.expectRevert(FamilyVault.NotAuthorized.selector);
+        vault.settleGroupGift(id, 1, block.timestamp + 300);
+
+        _chipIn(aunty, id, 5e5);
+        uint256 m = _minOut(AAPLC, 1e6);
+        vm.prank(relayer);
+        uint256 out = vault.settleGroupGift(id, m, block.timestamp + 300);
+        assertEq(vault.kidTokens(tobi, AAPLC), out);
+    }
+
+    function test_groupGift_refundBeforeSettle() public {
+        uint256 id = _open(aunty, 3e6);
+        _chipIn(aunty, id, 1e6);
+        _chipIn(uncle, id, 5e5);
+        assertEq(vault.totalInflow(), 15e5);
+
+        vm.prank(uncle);
+        vault.refundGroupGift(id);
+        assertEq(IERC20(USDC).balanceOf(uncle), 5e5);
+        assertEq(vault.escrowUsdc(), 1e6);
+        assertEq(vault.totalInflow(), 1e6);
+        (,,,,, uint256 raised) = vault.groupGifts(id);
+        assertEq(raised, 1e6);
+
+        vm.prank(uncle);
+        vm.expectRevert(FamilyVault.NothingToRefund.selector);
+        vault.refundGroupGift(id);
+
+        uint256 m = _minOut(AAPLC, 1e6);
+        vm.prank(aunty);
+        vault.settleGroupGift(id, m, block.timestamp + 300);
+        vm.prank(aunty);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.GroupGiftNotOpen.selector, id));
+        vault.refundGroupGift(id);
+    }
+
+    function test_groupGift_cancelThenEveryoneRefunds() public {
+        uint256 id = _open(aunty, 3e6);
+        _chipIn(aunty, id, 1e6);
+        _chipIn(uncle, id, 5e5);
+
+        vm.prank(uncle);
+        vm.expectRevert(FamilyVault.NotAuthorized.selector);
+        vault.cancelGroupGift(id);
+        vm.prank(parent); // the vault owner can also call it off
+        vault.cancelGroupGift(id);
+
+        deal(USDC, stranger, 1e6);
+        vm.startPrank(stranger);
+        IERC20(USDC).approve(address(vault), 1e6);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.GroupGiftNotOpen.selector, id));
+        vault.contributeToGroupGift(id, 1e6, bytes32("late"));
+        vm.stopPrank();
+        vm.prank(aunty);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.GroupGiftNotOpen.selector, id));
+        vault.settleGroupGift(id, 1, block.timestamp + 300);
+
+        vm.prank(aunty);
+        vault.refundGroupGift(id);
+        vm.prank(uncle);
+        vault.refundGroupGift(id);
+        assertEq(IERC20(USDC).balanceOf(aunty), 1e6);
+        assertEq(IERC20(USDC).balanceOf(uncle), 5e5);
+        assertEq(vault.escrowUsdc(), 0);
+        assertEq(IERC20(USDC).balanceOf(address(vault)), 0);
+    }
+
+    function test_groupGift_capsApply() public {
+        uint256 id = _open(aunty, 50e6);
+        deal(USDC, uncle, MAX_TX + 1);
+        vm.startPrank(uncle);
+        IERC20(USDC).approve(address(vault), MAX_TX + 1);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.OverTxCap.selector, MAX_TX + 1, MAX_TX));
+        vault.contributeToGroupGift(id, MAX_TX + 1, bytes32("x"));
+        vm.stopPrank();
+
+        // $25 raised is over the kid's $20 window: settling fails, and everyone can still get their money back.
+        address[5] memory cousins;
+        for (uint256 i; i < 5; ++i) {
+            cousins[i] = makeAddr(string(abi.encodePacked("cousin", vm.toString(i))));
+            _chipIn(cousins[i], id, MAX_TX);
+        }
+        vm.prank(aunty);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.OverKidCap.selector, 25e6, MAX_KID));
+        vault.settleGroupGift(id, 1, block.timestamp + 300);
+        vm.prank(aunty);
+        vault.cancelGroupGift(id);
+        vm.prank(cousins[0]);
+        vault.refundGroupGift(id);
+        assertEq(IERC20(USDC).balanceOf(cousins[0]), MAX_TX);
+        assertEq(vault.escrowUsdc(), 20e6);
+    }
+
+    function test_groupGift_refundWorksWhilePaused() public {
+        uint256 id = _open(aunty, 3e6);
+        _chipIn(uncle, id, 5e5);
+        vm.prank(parent);
+        vault.pause();
+        deal(USDC, aunty, 1e6);
+        vm.startPrank(aunty);
+        IERC20(USDC).approve(address(vault), 1e6);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vault.contributeToGroupGift(id, 1e6, bytes32("x"));
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vault.settleGroupGift(id, 1, block.timestamp + 300);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vault.openGroupGift(tobi, AAPLC, 1e6);
+        vm.stopPrank();
+        vm.prank(uncle);
+        vault.refundGroupGift(id);
+        assertEq(IERC20(USDC).balanceOf(uncle), 5e5);
+    }
+
+    function test_groupGift_escrowCannotBeSpentByPitches() public {
+        uint256 id = _open(aunty, 3e6);
+        _chipIn(uncle, id, 1e6);
+        // Tobi has no savings and the family pool is empty, so even a match can't touch the escrow.
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.InsufficientKidUsdc.selector, 0, 1e5));
+        vault.approvePitchBuy(tobi, AAPLC, 1e5, 0, 1, block.timestamp + 300);
+        assertEq(vault.escrowUsdc(), 1e6);
+    }
+
+    function test_groupGift_rejectsUnlistedTokenAndZeroTarget() public {
+        vm.startPrank(aunty);
+        vm.expectRevert(abi.encodeWithSelector(FamilyVault.TokenNotAllowed.selector, MSFTC));
+        vault.openGroupGift(tobi, MSFTC, 1e6);
+        vm.expectRevert(FamilyVault.ZeroAmount.selector);
+        vault.openGroupGift(tobi, AAPLC, 0);
+        vm.stopPrank();
+    }
+
+    function test_tokenList_keepsEveryListedToken() public {
+        vm.prank(parent);
+        vault.setTokenAllowed(AAPLC, 0); // disallow Apple; graduation must still find it
+        address[] memory list = vault.tokenList();
+        assertEq(list.length, 2);
+        assertEq(list[0], AAPLC);
+        assertEq(list[1], NVDAC);
+    }
 }

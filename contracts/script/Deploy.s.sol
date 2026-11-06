@@ -7,6 +7,7 @@ import {FamilyVault} from "../src/FamilyVault.sol";
 import {FamilyVaultFactory} from "../src/FamilyVaultFactory.sol";
 import {ISlipstreamRouter} from "../src/interfaces/ISlipstreamRouter.sol";
 
+/// v2 (graduation + group gifts). Writes deployments/base-mainnet-v2.json so the v1 record is kept.
 /// Deploys the factory, then the Adeyemi demo vault, which the deployer creates and owns.
 /// The deployer is the single hot wallet: it owns the demo vault, operates it, and is the
 /// factory's default operator for real families.
@@ -60,7 +61,7 @@ contract Deploy is Script {
             vm.serializeAddress(json, "demoVault", address(demoVault));
             vm.serializeAddress(json, "owner", deployer);
             string memory out = vm.serializeUint(json, "chainId", block.chainid);
-            vm.writeJson(out, "./deployments/base-mainnet.json");
+            vm.writeJson(out, "./deployments/base-mainnet-v2.json");
         }
     }
 }
