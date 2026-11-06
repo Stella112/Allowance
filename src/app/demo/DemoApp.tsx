@@ -282,7 +282,7 @@ function PinPad({ morning, onUnlock }: { morning: boolean; onUnlock: () => void 
 function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPitch: (p: { ticker: Ticker; why: string }) => void }) {
   const [pick, setPick] = useState<Ticker | null>(null);
   const [why, setWhy] = useState("");
-  const [cards, setCards] = useState<Partial<Record<Ticker, Card>>>({});
+  const [cards, setCards] = useState<Partial<Record<Ticker, Card & { source?: string }>>>({});
   const card = pick ? cards[pick] ?? null : null;
   const pitch = state.events.find((e) => e.kind === "pitch" && e.status !== "failed");
 
@@ -290,7 +290,7 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
     if (!pick || cards[pick]) return;
     fetch(`/api/ai/explain?ticker=${pick}&band=10-13`)
       .then((r) => r.json())
-      .then((j) => j.card && setCards((c) => ({ ...c, [pick]: j.card })))
+      .then((j) => j.card && setCards((c) => ({ ...c, [pick]: { ...j.card, source: j.source } })))
       .catch(() => {});
   }, [pick, cards]);
 
@@ -340,7 +340,10 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                     <dt className="font-semibold text-star">One thing to watch</dt>
                     <dd>{card.oneThingToWatch}</dd>
                   </div>
-                  <p className="pt-1 text-xs text-moon-dim">Written by AI for ages 10–13. Learning only, not financial advice.</p>
+                  <p className="pt-1 text-xs text-moon-dim">
+                    {card.source === "ai" ? "Written live by Claude (AI) for ages 10–13." : "Written with Claude (AI) while building Allowance, for ages 10–13."} Learning only,
+                    not financial advice.
+                  </p>
                 </dl>
               ) : (
                 <p className="text-moon-dim">Reading about {COMPANIES[pick].name}…</p>
