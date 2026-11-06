@@ -14,6 +14,7 @@ export const config = {
   usdc: () => addr("USDC_ADDRESS"),
   quoter: () => addr("AERODROME_QUOTER"),
   demoVault: () => addr("DEMO_VAULT_ADDRESS"),
+  factory: () => addr("FAMILY_VAULT_FACTORY_ADDRESS"),
   relayerKey: () => required("RELAYER_PRIVATE_KEY") as `0x${string}`,
   supabaseUrl: () => required("NEXT_PUBLIC_SUPABASE_URL"),
   supabaseServiceKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),

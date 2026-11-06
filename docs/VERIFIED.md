@@ -68,3 +68,5 @@ One line per fact: **status**, the fact, its source, and the date checked. Addre
 - UNVERIFIED (needed for P1-1): CDP Embedded Wallets. The `@coinbase/cdp-react`, `cdp-hooks`, `cdp-wagmi` and `cdp-core` packages are at 0.0.128, which is pre-1.0. I haven't yet found the docs pages for email one-time-code sign-in, smart accounts or paymaster pricing. To verify before Phase 5.
 - UNVERIFIED (needed for P1-5): Base spend permissions on mainnet. The Base docs list a "Charge on a Schedule" page at /build-on-base/accept-payments/charge-on-a-schedule. To verify before Phase 5.
 - UNVERIFIED: the current Anthropic model ID. To check against Anthropic's docs before Phase 3.
+- VERIFIED: FamilyVault v2 demo vault 0xaB7A0f6ea2fb8b81096dbBe3c055101b258689F2 passes the TRANSFER_RECEIVER policy for AAPLc and NVDAc (`canReceive` returned true on mainnet). Source: on-chain read. Checked 2026-11-06.
+

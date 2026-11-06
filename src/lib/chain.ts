@@ -27,7 +27,24 @@ const vaultAbi = parseAbi([
   "event PitchBought(bytes32 indexed kidId, address indexed token, uint256 kidUsdcSpent, uint256 matchUsdc, uint256 tokensOut)",
   "event GiftReceived(bytes32 indexed kidId, address indexed token, address indexed from, bytes32 gifterTag, uint256 usdcIn, uint256 tokensOut)",
   "event AllowanceReleased(bytes32 indexed kidId, uint256 amount, uint256 nextReleaseAt)",
+  // v2: group gifts and graduation
+  "function openGroupGift(bytes32 kidId, address token, uint256 target) returns (uint256)",
+  "function contributeToGroupGift(uint256 id, uint256 amount, bytes32 gifterTag)",
+  "function settleGroupGift(uint256 id, uint256 minOut, uint256 deadline) returns (uint256)",
+  "function cancelGroupGift(uint256 id)",
+  "function refundGroupGift(uint256 id)",
+  "function groupGifts(uint256) view returns (bytes32 kidId, address token, address organizer, uint8 status, uint256 target, uint256 raised)",
+  "function contributionOf(uint256, address) view returns (uint256)",
+  "function graduate(bytes32 kidId, address to)",
+  "function graduatedTo(bytes32) view returns (address)",
+  "function canReceive(address token, address to) view returns (bool)",
+  "event GroupGiftOpened(uint256 indexed id, bytes32 indexed kidId, address indexed token, address organizer, uint256 target)",
+  "event GroupGiftSettled(uint256 indexed id, bytes32 indexed kidId, address indexed token, uint256 usdcIn, uint256 tokensOut)",
+  "event Graduated(bytes32 indexed kidId, address indexed to, uint256 usdc)",
 ]);
+
+/** The vault ABI for other server code (this module is server-only). */
+export { vaultAbi };
 const erc20Abi = parseAbi([
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
@@ -186,4 +203,23 @@ export async function demoFunds() {
     publicClient.readContract({ address: config.usdc(), abi: erc20Abi, functionName: "balanceOf", args: [relayerAddress()] }),
   ]);
   return { pool, relayerUsdc };
+}
+
+// ---------------------------------------------------------------- v2 reads
+
+export const GROUP_STATUS = ["none", "open", "settled", "cancelled"] as const;
+
+export async function groupGift(vault: `0x${string}`, id: bigint) {
+  const [kidId, token, organizer, status, target, raised] = await publicClient.readContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: "groupGifts",
+    args: [id],
+  });
+  return { kidId, token, organizer, status: GROUP_STATUS[status] ?? "none", target, raised };
+}
+
+/** Whether a wallet passes the stock's transfer rules (the same check graduation runs on-chain). */
+export async function canReceive(vault: `0x${string}`, token: `0x${string}`, to: `0x${string}`) {
+  return publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "canReceive", args: [token, to] });
 }
