@@ -18,6 +18,12 @@ export const config = {
   relayerKey: () => required("RELAYER_PRIVATE_KEY") as `0x${string}`,
   supabaseUrl: () => required("NEXT_PUBLIC_SUPABASE_URL"),
   supabaseServiceKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
+  // Coinbase Developer Platform: the server checks parents' sign-in tokens with a secret API key.
+  cdpApiKeyId: () => required("CDP_API_KEY_ID"),
+  cdpApiKeySecret: () => required("CDP_API_KEY_SECRET"),
+  // Passkeys (Face ID / fingerprint): must match the site the browser is on.
+  webauthnRpId: () => required("WEBAUTHN_RP_ID"),
+  webauthnOrigin: () => required("WEBAUTHN_ORIGIN"),
   // Live AI cards only when explicitly switched on (and a key is set); otherwise the cards written during the build are used.
   anthropicConfigured: () => process.env.AI_CARDS_ENABLED === "true" && Boolean(process.env.ANTHROPIC_API_KEY),
   // Demo money (USDC, 6 decimals). Budget plan: about 50 judge sessions on $2.
