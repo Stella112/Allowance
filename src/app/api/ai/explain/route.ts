@@ -1,7 +1,6 @@
 import { explainerCard } from "@/lib/ai";
 import { isTicker, type AgeBand } from "@/lib/stocks";
 
-export const dynamic = "force-dynamic";
 
 const BANDS: AgeBand[] = ["6-9", "10-13", "14-17"];
 

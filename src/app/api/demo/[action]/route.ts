@@ -14,7 +14,6 @@ import {
 } from "@/lib/demo";
 import { isTicker } from "@/lib/stocks";
 
-export const dynamic = "force-dynamic";
 export const maxDuration = 120; // on-chain steps wait for confirmations
 
 const COOKIE = "demo_sid";
