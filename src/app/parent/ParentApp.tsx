@@ -133,10 +133,17 @@ function ParentFlow() {
         </p>
       )}
 
-      {!isSignedIn || !me ? (
+      {!isSignedIn ? (
         <section className="rounded-2xl bg-night-900 p-5">
           <AuthButton />
         </section>
+      ) : !me ? (
+        // Signed in with Coinbase; our server is still checking the sign-in (or showed an error above).
+        !error && (
+          <p aria-live="polite" className="animate-pulse rounded-xl bg-night-800 px-3 py-2 text-sm">
+            ⏳ Checking your sign-in…
+          </p>
+        )
       ) : !me.hasPasskey ? (
         <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
           <h2 className="text-lg font-semibold">Step 2: turn on Face ID or fingerprint</h2>
