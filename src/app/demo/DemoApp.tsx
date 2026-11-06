@@ -685,12 +685,14 @@ function Graduation({ state, busy, onGraduate }: { state: State; busy: boolean; 
       {grad ? (
         <>
           <p className="mt-1 font-semibold">{grad.status === "confirmed" ? "🎓 Tobi graduated! His shares and savings are in his own wallet." : "Moving Tobi's shares…"}</p>
-          {grad.status === "confirmed" && grad.message && (
-            <a href={`https://basescan.org/address/${grad.message}#tokentxns`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm underline">
-              See the wallet on Basescan ↗
-            </a>
-          )}
-          {grad.txUrl && <TxLink href={grad.txUrl} />}
+          <div className="flex flex-wrap gap-x-4">
+            {grad.txUrl && <TxLink href={grad.txUrl} />}
+            {grad.status === "confirmed" && grad.message && (
+              <a href={`https://basescan.org/address/${grad.message}#tokentxns`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold underline">
+                See Tobi&apos;s wallet ↗
+              </a>
+            )}
+          </div>
           <p className="mt-2 text-xs opacity-70">
             In the demo, &quot;Tobi&apos;s wallet&quot; is Allowance&apos;s demo wallet, so the cents aren&apos;t sent somewhere nobody controls. In the real app, Tobi signs up with his
             own email and gets his own wallet.
