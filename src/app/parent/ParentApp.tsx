@@ -5,6 +5,7 @@ import { AuthButton } from "@coinbase/cdp-react/components/AuthButton";
 import { useGetAccessToken, useIsInitialized, useIsSignedIn, useSignOut } from "@coinbase/cdp-hooks";
 import { startRegistration } from "@simplewebauthn/browser";
 import Link from "next/link";
+import Family from "./Family";
 import { useCallback, useEffect, useState } from "react";
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_CDP_PROJECT_ID ?? "";
@@ -147,17 +148,15 @@ function ParentFlow() {
           </button>
         </section>
       ) : (
-        <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
-          <h2 className="text-lg font-semibold">You&apos;re set up ✅</h2>
-          <p className="text-sm text-moon-dim">Signed in as {me.parent.email ?? "a parent"}.</p>
+        <>
           <p className="break-all text-sm text-moon-dim">
-            Your wallet on Base:{" "}
+            Signed in as {me.parent.email ?? "a parent"} · Wallet{" "}
             <a className="underline" href={`https://basescan.org/address/${me.parent.wallet}`} target="_blank" rel="noreferrer">
               {me.parent.wallet}
             </a>
           </p>
-          <p className="text-sm">Next: add your first child. That creates your family vault on Base.</p>
-        </section>
+          <Family />
+        </>
       )}
 
       {isSignedIn && (

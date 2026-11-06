@@ -111,8 +111,7 @@ export async function setAndReleaseAllowance(kidId: Hash) {
   return releaseAllowance(kidId);
 }
 
-export async function releaseAllowance(kidId: Hash) {
-  const vault = config.demoVault();
+export async function releaseAllowance(kidId: Hash, vault: `0x${string}` = config.demoVault()) {
   const [, , nextReleaseAt] = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "allowanceOf", args: [kidId] });
   const wait = Number(nextReleaseAt) * 1000 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait + 2_000)); // the contract allows one release per period
@@ -123,12 +122,12 @@ export async function releaseAllowance(kidId: Hash) {
 }
 
 /** Buys shares for an approved pitch. matchBps (0..10000) is the parent's match, paid from the family pool. */
-export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint, matchBps = 0n) {
+export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint, matchBps = 0n, vault: `0x${string}` = config.demoVault()) {
   const total = usdcMicro + (usdcMicro * matchBps) / 10_000n;
   const { minOut } = await quoteMinOut(ticker, total);
   const receipt = await send(() =>
     wallet().writeContract({
-      address: config.demoVault(),
+      address: vault,
       abi: vaultAbi,
       functionName: "approvePitchBuy",
       args: [kidId, STOCKS[ticker].token, usdcMicro, matchBps, minOut, deadline()],
@@ -180,8 +179,7 @@ export async function uiMultipliers(): Promise<Record<Ticker, string>> {
 }
 
 /** Reads the kid's balances from the chain (the source of truth). */
-export async function kidHoldings(kidId: Hash): Promise<Holdings> {
-  const vault = config.demoVault();
+export async function kidHoldings(kidId: Hash, vault: `0x${string}` = config.demoVault()): Promise<Holdings> {
   const tickers = Object.keys(STOCKS) as Ticker[];
   const [usdc, ...rest] = await Promise.all([
     publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "kidUsdc", args: [kidId] }),
@@ -286,4 +284,33 @@ export async function graduateTx(kidId: Hash, to: `0x${string}`) {
 export async function graduatedTo(kidId: Hash) {
   const to = await publicClient.readContract({ address: config.demoVault(), abi: vaultAbi, functionName: "graduatedTo", args: [kidId] });
   return to === "0x0000000000000000000000000000000000000000" ? null : to;
+}
+
+// ---------------------------------------------------------------- real families
+
+const factoryAbi = parseAbi(["function vaultOf(address) view returns (address)"]);
+
+/** The family vault a parent's wallet created through our factory (read from the chain), or null. */
+export async function vaultOfParent(wallet: `0x${string}`) {
+  const v = await publicClient.readContract({ address: config.factory(), abi: factoryAbi, functionName: "vaultOf", args: [wallet] });
+  return v === "0x0000000000000000000000000000000000000000" ? null : v;
+}
+
+/** A family vault's settings that the app shows and checks. */
+export async function vaultInfo(vault: `0x${string}`) {
+  const [owner, operator, familyUsdc] = await Promise.all([
+    publicClient.readContract({ address: vault, abi: parseAbi(["function owner() view returns (address)"]), functionName: "owner" }),
+    publicClient.readContract({ address: vault, abi: parseAbi(["function operator() view returns (address)"]), functionName: "operator" }),
+    publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "familyUsdc" }),
+  ]);
+  return { owner, operator, familyUsdc };
+}
+
+export async function allowanceSchedule(vault: `0x${string}`, kidId: Hash) {
+  const [amount, period, nextReleaseAt] = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "allowanceOf", args: [kidId] });
+  return { amount, period, nextReleaseAt };
+}
+
+export async function usdcBalance(address: `0x${string}`) {
+  return publicClient.readContract({ address: config.usdc(), abi: erc20Abi, functionName: "balanceOf", args: [address] });
 }
