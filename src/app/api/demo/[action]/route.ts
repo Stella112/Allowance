@@ -111,6 +111,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/demo/[action]">
 
 function toResponse(err: unknown) {
   if (err instanceof DemoError) return Response.json({ error: err.message }, { status: err.status });
-  console.error(err);
+  // Supabase errors are plain objects; log their fields so they don't print as "{}".
+  console.error("[demo] error:", err instanceof Error ? err : JSON.stringify(err));
   return Response.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
 }
