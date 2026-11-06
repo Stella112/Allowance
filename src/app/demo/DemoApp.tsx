@@ -50,7 +50,11 @@ const COMPANIES: Record<Ticker, { name: string; emoji: string }> = {
 };
 const OCCASIONS = ["Birthday", "Good grades", "Christmas", "Eid", "Graduation"];
 
-const usd = (micro: number | string) => `$${(Number(micro) / 1e6).toFixed(2)}`;
+// Whole cents show 2 decimals; smaller amounts (like a half-cent match) show 3, so nothing is rounded up.
+const usd = (micro: number | string) => {
+  const n = Number(micro);
+  return `$${(n / 1e6).toFixed(n % 10_000 === 0 ? 2 : 3)}`;
+};
 const shares = (raw: string | null) => (raw ? (Number(raw) / 1e8).toFixed(7).replace(/0+$/, "") : "0");
 const clock = (iso: string, offsetH: number) => {
   const d = new Date(new Date(iso).getTime() + offsetH * 3600_000);
@@ -83,8 +87,12 @@ export default function DemoApp() {
   const [error, setError] = useState<string | null>(null);
   const [nightShift, setNightShift] = useState(false);
 
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    api<State>("state").then(setState).catch(() => setState(null));
+    api<State>("state")
+      .then(setState)
+      .catch(() => setState(null))
+      .finally(() => setLoaded(true));
   }, []);
 
   // While a transaction is still landing (e.g. Tobi's first allowance), refresh every 3 seconds.
@@ -135,6 +143,12 @@ export default function DemoApp() {
     });
 
   if (replay) return <Replay items={replay} />;
+  if (!loaded && !state)
+    return (
+      <main className="flex flex-1 items-center justify-center p-10" aria-busy="true">
+        <p className="animate-pulse text-moon-dim">🌙 Waking up the Adeyemi family…</p>
+      </main>
+    );
   if (!state) return <Welcome onStart={start} busy={busy} error={error} />;
 
   const morning = state.session.morning;
