@@ -57,6 +57,9 @@ const usd = (micro: number | string | null | undefined) => {
   return `$${(n / 1e6).toFixed(n % 10_000 === 0 ? 2 : 3)}`;
 };
 
+// Base mainnet paymaster endpoint from the CDP Portal (Onchain Tools > Paymaster). Its client key is meant for browsers.
+const PAYMASTER_URL = process.env.NEXT_PUBLIC_CDP_PAYMASTER_URL || undefined;
+
 const factoryAbi = parseAbi(["function createVault() returns (address)"]);
 const vaultAbi = parseAbi(["function setAllowance(bytes32 kidId, uint128 amount, uint64 period)", "function deposit(uint256 amount)"]);
 const erc20Abi = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
@@ -99,7 +102,13 @@ export default function Family() {
   const sponsored = async (calls: { to: `0x${string}`; data: `0x${string}` }[], done: (s: FamilyState) => boolean, confirm?: () => Promise<FamilyState>) => {
     if (!state) return;
     try {
-      await sendUserOperation({ evmSmartAccount: state.parent.wallet, network: "base", calls, useCdpPaymaster: true });
+      // Prefer the project's own paymaster URL from the CDP Portal (Onchain Tools > Paymaster) when it's set;
+      // otherwise ask Coinbase to use the project's default CDP paymaster.
+      await sendUserOperation(
+        PAYMASTER_URL
+          ? { evmSmartAccount: state.parent.wallet, network: "base", calls, paymasterUrl: PAYMASTER_URL }
+          : { evmSmartAccount: state.parent.wallet, network: "base", calls, useCdpPaymaster: true },
+      );
     } catch (e) {
       throw new Error(
         `Coinbase couldn't send this for you (${(e as Error).message}). If it says the gas wasn't sponsored, your wallet needs a few cents of ETH on Base: ${state.parent.wallet}`,
