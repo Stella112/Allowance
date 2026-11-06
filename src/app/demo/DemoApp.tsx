@@ -8,8 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 type Ticker = "AAPL" | "NVDA";
 type Ev = {
   id: number;
-  kind: "allowance" | "pitch" | "gift" | "thank_you";
-  status: "pending" | "queued" | "sending" | "confirmed" | "failed" | "rejected";
+  kind: "allowance" | "pitch" | "gift" | "thank_you" | "group_gift" | "contribution" | "graduation";
+  status: "pending" | "queued" | "sending" | "confirmed" | "failed" | "rejected" | "refunded";
   ticker: Ticker | null;
   usdc_micro: number;
   tokens_raw: string | null;
@@ -209,10 +209,22 @@ export default function DemoApp() {
             <PinPad morning={morning} onUnlock={() => setKidUnlocked(true)} />
           ))}
         {role === "parent" && (
-          <ParentView state={state} busy={!!busy} onApprove={(eventId, matchPct) => run("Buying real shares on Base…", () => api("approve", { eventId, matchPct }))} />
+          <ParentView
+            state={state}
+            busy={!!busy}
+            onApprove={(eventId, matchPct) => run("Buying real shares on Base…", () => api("approve", { eventId, matchPct }))}
+            onGraduate={() => run("Moving Tobi's shares to his own wallet on Base…", () => api("graduate", {}))}
+          />
         )}
         {role === "relative" && (
-          <RelativeView state={state} busy={!!busy} onGift={(g) => run("Wrapping your gift…", () => api("gift", g))} />
+          <RelativeView
+            state={state}
+            busy={!!busy}
+            onGift={(g) => run("Wrapping your gift…", () => api("gift", g))}
+            onGroup={(g) => run("Starting the group gift on Base and chipping in…", () => api("group-gift", g))}
+            onChipIn={() => run("Uncle Dayo is chipping in from Houston…", () => api("chip-in", {}))}
+            onCallOff={() => run("Calling it off and refunding everyone on Base…", () => api("call-off", {}))}
+          />
         )}
 
         <div className="mt-2 flex flex-col gap-2">
@@ -244,10 +256,16 @@ function StepGuide({ state, role, onGo, onSkip, busy }: { state: State; role: Ro
   const pitch = ev.find((e) => e.kind === "pitch" && e.status !== "failed");
   const steps: { label: string; done: boolean; role?: Role; who?: string }[] = [
     { label: "Tobi pitches a company at bedtime", done: !!pitch, role: "kid", who: "Tobi" },
-    { label: "Aunty Funmi sends a gift from London", done: ev.some((e) => e.kind === "gift"), role: "relative", who: "Aunty Funmi" },
+    {
+      label: "Aunty Funmi sends a gift (alone, or with Uncle Dayo)",
+      done: ev.some((e) => (e.kind === "gift" || e.kind === "group_gift") && e.status !== "failed" && e.status !== "rejected"),
+      role: "relative",
+      who: "Aunty Funmi",
+    },
     { label: "Skip to morning", done: morning },
     { label: "Mum approves the pitch at breakfast", done: pitch?.status === "confirmed", role: "parent", who: "Mum" },
     { label: "Tobi reads his Morning Report and says thanks", done: ev.some((e) => e.kind === "thank_you"), role: "kid", who: "Tobi" },
+    { label: "Bonus: fast-forward to 18, Mum graduates Tobi", done: ev.some((e) => e.kind === "graduation" && e.status === "confirmed"), role: "parent", who: "Mum" },
   ];
   // Night steps can't be done after morning; skip them when choosing what's next.
   const next = steps.findIndex((s, i) => !s.done && !(morning && i < 3));
@@ -584,7 +602,17 @@ function Savings({ state }: { state: State }) {
 
 const MATCHES = [0, 25, 50, 100];
 
-function ParentView({ state, busy, onApprove }: { state: State; busy: boolean; onApprove: (id: number, matchPct: number) => void }) {
+function ParentView({
+  state,
+  busy,
+  onApprove,
+  onGraduate,
+}: {
+  state: State;
+  busy: boolean;
+  onApprove: (id: number, matchPct: number) => void;
+  onGraduate: () => void;
+}) {
   const pitches = state.events.filter((e) => e.kind === "pitch");
   const morning = state.session.morning;
   const [match, setMatch] = useState(50);
@@ -642,29 +670,99 @@ function ParentView({ state, busy, onApprove }: { state: State; busy: boolean; o
           {p.txUrl && <TxLink href={p.txUrl} />}
         </article>
       ))}
+      {morning && <Graduation state={state} busy={busy} onGraduate={onGraduate} />}
     </section>
   );
 }
 
-function RelativeView({ state, busy, onGift }: { state: State; busy: boolean; onGift: (g: { ticker: Ticker; occasion: string; message: string }) => void }) {
+function Graduation({ state, busy, onGraduate }: { state: State; busy: boolean; onGraduate: () => void }) {
+  const grad = state.events.find((e) => e.kind === "graduation" && e.status !== "failed");
+  const owns = state.holdings?.stocks.some((s) => s.raw !== "0");
+  const landing = state.events.some((e) => e.status === "sending" && e.kind !== "graduation");
+  return (
+    <article className="rounded-xl bg-sunrise-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-sunrise-700">Fast-forward: Tobi turns 18 🎓</p>
+      {grad ? (
+        <>
+          <p className="mt-1 font-semibold">{grad.status === "confirmed" ? "🎓 Tobi graduated! His shares and savings are in his own wallet." : "Moving Tobi's shares…"}</p>
+          {grad.status === "confirmed" && grad.message && (
+            <a href={`https://basescan.org/address/${grad.message}#tokentxns`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm underline">
+              See the wallet on Basescan ↗
+            </a>
+          )}
+          {grad.txUrl && <TxLink href={grad.txUrl} />}
+          <p className="mt-2 text-xs opacity-70">
+            In the demo, &quot;Tobi&apos;s wallet&quot; is Allowance&apos;s demo wallet, so the cents aren&apos;t sent somewhere nobody controls. In the real app, Tobi signs up with his
+            own email and gets his own wallet.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-sm">
+            Years from now, Tobi signs up with his own email and gets his own wallet. Graduating sends every share and his savings out of the family vault to that
+            wallet in one transaction, after checking each stock&apos;s transfer rules. His history comes with him.
+          </p>
+          <button
+            type="button"
+            disabled={busy || landing || !owns}
+            onClick={onGraduate}
+            className="mt-3 w-full rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon disabled:opacity-60"
+          >
+            🎓 Graduate Tobi (Demo approval)
+          </button>
+          {!owns && <p className="mt-1 text-xs opacity-70">Tobi needs at least one share first. Approve his pitch above.</p>}
+        </>
+      )}
+    </article>
+  );
+}
+
+type GiftInput = { ticker: Ticker; occasion: string; message: string };
+
+function RelativeView({
+  state,
+  busy,
+  onGift,
+  onGroup,
+  onChipIn,
+  onCallOff,
+}: {
+  state: State;
+  busy: boolean;
+  onGift: (g: GiftInput) => void;
+  onGroup: (g: GiftInput) => void;
+  onChipIn: () => void;
+  onCallOff: () => void;
+}) {
   const [ticker, setTicker] = useState<Ticker>("AAPL");
   const [occasion, setOccasion] = useState(OCCASIONS[1]);
   const [message, setMessage] = useState("Well done on your test, Tobi!");
+  const [mode, setMode] = useState<"solo" | "group">("solo");
   const gift = state.events.find((e) => e.kind === "gift" && e.status !== "failed");
+  const group = [...state.events].reverse().find((e) => e.kind === "group_gift" && e.status !== "failed");
+  const contributions = group ? state.events.filter((e) => e.kind === "contribution" && e.ref_event_id === group.id && e.status !== "failed") : [];
+  const raised = contributions.filter((c) => c.status === "confirmed").reduce((s, c) => s + c.usdc_micro, 0);
+  const dayoIn = contributions.some((c) => c.gifter_name === "Uncle Dayo");
+  const groupLive = group && group.status !== "rejected";
   const thanks = state.events.filter((e) => e.kind === "thank_you");
   const morning = state.session.morning;
   const now = state.session.virtualNow;
+  const panel = morning ? "bg-sunrise-50" : "bg-night-800";
 
   return (
     <section className={`flex flex-col gap-3 rounded-2xl p-5 ${morning ? "bg-white" : "bg-night-900"}`}>
-      <div className={`grid grid-cols-2 gap-2 rounded-xl p-3 text-center ${morning ? "bg-sunrise-50" : "bg-night-800"}`}>
+      <div className={`grid grid-cols-3 gap-2 rounded-xl p-3 text-center ${panel}`}>
         <div>
-          <p className="text-xs opacity-70">London</p>
-          <p className="text-2xl font-bold">{clock(now, 0)}</p>
+          <p className="text-xs opacity-70">London (Funmi)</p>
+          <p className="text-xl font-bold">{clock(now, 0)}</p>
         </div>
         <div>
-          <p className="text-xs opacity-70">Lagos</p>
-          <p className="text-2xl font-bold">{clock(now, 1)}</p>
+          <p className="text-xs opacity-70">Lagos (Tobi)</p>
+          <p className="text-xl font-bold">{clock(now, 1)}</p>
+        </div>
+        <div>
+          <p className="text-xs opacity-70">Houston (Dayo)</p>
+          <p className="text-xl font-bold">{clock(now, -6)}</p>
         </div>
       </div>
       {!morning && <p className="text-center">It&apos;s {clock(now, 1)} in Lagos. Tobi will wake up to your gift. 🌙</p>}
@@ -682,7 +780,7 @@ function RelativeView({ state, busy, onGift }: { state: State; busy: boolean; on
       ))}
 
       {gift ? (
-        <div className={`rounded-xl p-4 ${morning ? "bg-sunrise-50" : "bg-night-800"}`}>
+        <div className={`rounded-xl p-4 ${panel}`}>
           <p className="font-semibold">
             🎁 {gift.occasion} gift: {usd(gift.usdc_micro)} of {COMPANIES[gift.ticker!].name}
           </p>
@@ -691,49 +789,157 @@ function RelativeView({ state, busy, onGift }: { state: State; busy: boolean; on
           </p>
           {gift.txUrl && <TxLink href={gift.txUrl} />}
         </div>
+      ) : groupLive ? (
+        <GroupGiftCard group={group} contributions={contributions} raised={raised} dayoIn={dayoIn} busy={busy} morning={morning} onChipIn={onChipIn} onCallOff={onCallOff} />
       ) : morning ? (
         <p className="opacity-80">No gift was sent last night.</p>
       ) : (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onGift({ ticker, occasion, message });
-          }}
-        >
-          <fieldset>
-            <legend className="font-semibold">Gift a slice of</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {(Object.keys(COMPANIES) as Ticker[]).map((t) => (
-                <button key={t} type="button" aria-pressed={ticker === t} onClick={() => setTicker(t)} className={`rounded-xl p-3 ${ticker === t ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}>
-                  {COMPANIES[t].emoji} {COMPANIES[t].name}
-                </button>
-              ))}
+        <>
+          {group?.status === "rejected" && (
+            <div className={`rounded-xl p-4 text-sm ${panel}`}>
+              <p className="font-semibold">↩️ The group gift was called off and everyone got their money back.</p>
+              {group.txUrl && <TxLink href={group.txUrl} />}
             </div>
-          </fieldset>
-          <label className="flex flex-col gap-1">
-            <span className="font-semibold">Occasion</span>
-            <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="rounded-xl bg-white p-3 text-ink">
-              {OCCASIONS.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-semibold">Message</span>
-            <input value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
-          </label>
-          <div className="rounded-xl bg-night-800 p-3 text-xs text-moon-dim">
-            <p>Amount: $0.02 USDC · Network: Base</p>
-            <p>Tobi gets: a slice of a real Coinbase tokenized {COMPANIES[ticker].name} share</p>
-            <p>Goes to: the Adeyemi family vault (demo; Allowance pays)</p>
+          )}
+          <div role="group" aria-label="Gift type" className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["solo", "🎁 Just me"],
+                ["group", "👨🏾‍👩🏾‍👧🏾 With Uncle Dayo"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={mode === id}
+                onClick={() => setMode(id)}
+                className={`rounded-xl p-3 font-semibold ${mode === id ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <button type="submit" disabled={busy} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
-            🎁 Send gift
-          </button>
-        </form>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              (mode === "solo" ? onGift : onGroup)({ ticker, occasion, message });
+            }}
+          >
+            <fieldset>
+              <legend className="font-semibold">Gift a slice of</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {(Object.keys(COMPANIES) as Ticker[]).map((t) => (
+                  <button key={t} type="button" aria-pressed={ticker === t} onClick={() => setTicker(t)} className={`rounded-xl p-3 ${ticker === t ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}>
+                    {COMPANIES[t].emoji} {COMPANIES[t].name}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <label className="flex flex-col gap-1">
+              <span className="font-semibold">Occasion</span>
+              <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="rounded-xl bg-white p-3 text-ink">
+                {OCCASIONS.map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-semibold">Message</span>
+              <input value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
+            </label>
+            <div className="rounded-xl bg-night-800 p-3 text-xs text-moon-dim">
+              {mode === "solo" ? (
+                <p>Amount: $0.02 USDC · Network: Base</p>
+              ) : (
+                <>
+                  <p>Target: $0.02 USDC · You chip in $0.01, Uncle Dayo chips in $0.01 · Network: Base</p>
+                  <p>The money waits in the vault&apos;s escrow until the night shift buys the shares. Anyone can take their part back before then.</p>
+                </>
+              )}
+              <p>Tobi gets: a slice of a real Coinbase tokenized {COMPANIES[ticker].name} share</p>
+              <p>Goes to: the Adeyemi family vault (demo; Allowance pays)</p>
+            </div>
+            <button type="submit" disabled={busy} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+              {mode === "solo" ? "🎁 Send gift" : "👨🏾‍👩🏾‍👧🏾 Start group gift and chip in $0.01"}
+            </button>
+          </form>
+        </>
       )}
     </section>
+  );
+}
+
+function GroupGiftCard({
+  group,
+  contributions,
+  raised,
+  dayoIn,
+  busy,
+  morning,
+  onChipIn,
+  onCallOff,
+}: {
+  group: Ev;
+  contributions: Ev[];
+  raised: number;
+  dayoIn: boolean;
+  busy: boolean;
+  morning: boolean;
+  onChipIn: () => void;
+  onCallOff: () => void;
+}) {
+  const pct = Math.min(100, Math.round((raised / group.usdc_micro) * 100));
+  const open = group.status === "pending" || group.status === "queued";
+  return (
+    <div className={`flex flex-col gap-3 rounded-xl p-4 ${morning ? "bg-sunrise-50" : "bg-night-800"}`}>
+      <p className="font-semibold">
+        👨🏾‍👩🏾‍👧🏾 {group.occasion} group gift: {COMPANIES[group.ticker!].name} for Tobi
+      </p>
+      <div>
+        <div className="h-3 overflow-hidden rounded-full bg-night-700" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Raised so far">
+          <div className="h-full bg-star" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="mt-1 text-sm">
+          {usd(raised)} of {usd(group.usdc_micro)} raised
+        </p>
+      </div>
+      <ul className="flex flex-col gap-1 text-sm">
+        {contributions.map((c) => (
+          <li key={c.id}>
+            {c.gifter_name === "Uncle Dayo" ? "🧔🏾 Uncle Dayo (Houston)" : "👩🏾‍🦱 Aunty Funmi (London)"}: {usd(c.usdc_micro)}{" "}
+            {c.status === "refunded" ? "· refunded" : c.status === "sending" ? "· landing…" : ""}
+            {c.txUrl && (
+              <a href={c.txUrl} target="_blank" rel="noreferrer" className="ml-1 underline">
+                Basescan ↗
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+      {group.status === "confirmed" && (
+        <>
+          <p className="text-sm">Delivered while Tobi slept: {shares(group.tokens_raw)} shares.</p>
+          {group.txUrl && <TxLink href={group.txUrl} />}
+        </>
+      )}
+      {open && !morning && (
+        <div className="flex flex-col gap-2">
+          {!dayoIn && (
+            <button type="button" disabled={busy} onClick={onChipIn} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+              🧔🏾 Switch to Uncle Dayo: chip in $0.01
+            </button>
+          )}
+          {dayoIn && <p className="text-sm">🎯 Target reached! The night shift will turn it into shares. Tap Skip to morning.</p>}
+          <button type="button" disabled={busy} onClick={onCallOff} className="text-sm underline disabled:opacity-60">
+            Call it off and refund everyone
+          </button>
+          <p className="text-xs opacity-70">
+            In the demo, Allowance&apos;s wallet pays both relatives&apos; parts, so a refund returns both at once. In the real app, each relative takes back their own part.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -741,7 +947,8 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
   const [text, setText] = useState("Thank you Aunty Funmi! I love it 🧡");
   const [voice, setVoice] = useState<Blob | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const gifts = state.events.filter((e) => e.kind === "gift");
+  const gifts = state.events.filter((e) => e.kind === "gift" || (e.kind === "group_gift" && e.status !== "rejected"));
+  const graduated = state.events.find((e) => e.kind === "graduation" && e.status === "confirmed");
   const pitches = state.events.filter((e) => e.kind === "pitch" && e.status === "confirmed");
   const waiting = state.events.find((e) => e.kind === "pitch" && (e.status === "pending" || e.status === "sending"));
   const allowance = [...state.events].reverse().find((e) => e.kind === "allowance" && e.status === "confirmed");
@@ -770,12 +977,14 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
           {g.status === "confirmed" ? (
             <>
               <p className="text-lg font-semibold">
-                🎁 Aunty Funmi sent you a slice of {COMPANIES[g.ticker!].name} while you slept.
+                {g.kind === "group_gift"
+                  ? `🎁 Aunty Funmi and Uncle Dayo chipped in together for a slice of ${COMPANIES[g.ticker!].name} while you slept.`
+                  : `🎁 Aunty Funmi sent you a slice of ${COMPANIES[g.ticker!].name} while you slept.`}
               </p>
               <p className="text-sm opacity-80">
                 {g.occasion}: “{g.message}” · {shares(g.tokens_raw)} shares
               </p>
-              <Score score={scoreOf(g.id)} label={`Aunty Funmi's ${COMPANIES[g.ticker!].name} gift`} />
+              <Score score={scoreOf(g.id)} label={`${g.kind === "group_gift" ? "The family's" : "Aunty Funmi's"} ${COMPANIES[g.ticker!].name} gift`} />
               {g.txUrl && <TxLink href={g.txUrl} />}
               {!thanked.has(g.id) ? (
                 <form
@@ -786,7 +995,7 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
                   }}
                 >
                   <label htmlFor={`ty-${g.id}`} className="text-sm font-semibold">
-                    Send a thank-you to London
+                    Send a thank-you to {g.kind === "group_gift" ? "London and Houston" : "London"}
                   </label>
                   <input id={`ty-${g.id}`} value={text} maxLength={280} onChange={(e) => setText(e.target.value)} className="rounded-xl border border-sunrise-300 p-3" />
                   <VoiceRecorder onChange={setVoice} />
@@ -795,11 +1004,13 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
                   </button>
                 </form>
               ) : (
-                <p className="mt-2 text-sm">💌 Thank-you sent. Aunty Funmi will see it when she wakes up.</p>
+                <p className="mt-2 text-sm">
+                  💌 Thank-you sent. {g.kind === "group_gift" ? "Aunty Funmi and Uncle Dayo" : "Aunty Funmi"} will see it when they wake up.
+                </p>
               )}
             </>
           ) : (
-            <p>Aunty Funmi&apos;s gift couldn&apos;t be delivered this time, and no money moved.</p>
+            <p>{g.status === "sending" ? "⏳ Your gift is landing on Base right now…" : "Last night's gift couldn't be delivered this time, and no money moved."}</p>
           )}
         </article>
       ))}
@@ -848,7 +1059,14 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
 
       {gifts.length === 0 && pitches.length === 0 && <p className="rounded-2xl bg-white p-4">A quiet night. Your allowance still landed!</p>}
 
-      <Savings state={state} />
+      {graduated ? (
+        <article className="rounded-2xl bg-white p-4">
+          <p className="text-lg font-semibold">🎓 You graduated! Everything you own is in your own wallet now.</p>
+          {graduated.txUrl && <TxLink href={graduated.txUrl} />}
+        </article>
+      ) : (
+        <Savings state={state} />
+      )}
 
       <div className="flex flex-col gap-1">
         <button type="button" onClick={save} className="rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon">
@@ -988,8 +1206,16 @@ async function saveReportCard(state: State): Promise<string> {
   let y = line("☀️ GOOD MORNING, TOBI", 150, 40, 700, "#b4461a");
   y = line("My Morning Report", y + 10, 84, 800);
   y += 20;
-  const gift = state.events.find((e) => e.kind === "gift" && e.status === "confirmed");
-  if (gift) y = line(`🎁 Aunty Funmi sent me a slice of ${COMPANIES[gift.ticker!].name} from London while I slept.`, y, 46, 600);
+  const gift = state.events.find((e) => (e.kind === "gift" || e.kind === "group_gift") && e.status === "confirmed");
+  if (gift)
+    y = line(
+      gift.kind === "group_gift"
+        ? `🎁 Aunty Funmi (London) and Uncle Dayo (Houston) chipped in for a slice of ${COMPANIES[gift.ticker!].name} while I slept.`
+        : `🎁 Aunty Funmi sent me a slice of ${COMPANIES[gift.ticker!].name} from London while I slept.`,
+      y,
+      46,
+      600,
+    );
   for (const p of state.events.filter((e) => e.kind === "pitch" && e.status === "confirmed")) {
     y = line(`✅ Mum approved my ${COMPANIES[p.ticker!].name} pitch${p.match_pct ? ` and matched ${p.match_pct}%` : ""}.`, y, 46, 600);
   }
@@ -1100,8 +1326,10 @@ function Replay({ items }: { items: ReplayItem[] }) {
           <li key={i.txUrl} className="rounded-2xl bg-night-900 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-star">Replay of a real transaction</p>
             <p className="mt-1">
-              {i.kind === "gift"
+              {i.kind === "gift" || i.kind === "group_gift"
                 ? `🎁 ${i.gifter_name ?? "A relative"} gifted ${usd(i.usdc_micro)} of ${i.company}`
+                : i.kind === "graduation"
+                  ? "🎓 A kid graduated: shares moved to their own wallet"
                 : i.kind === "pitch"
                   ? `✅ A pitch was approved: ${usd(i.usdc_micro)} of ${i.company}`
                   : `🌙 An allowance of ${usd(i.usdc_micro)} landed`}

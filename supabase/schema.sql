@@ -15,8 +15,8 @@ create table if not exists demo_sessions (
 create table if not exists demo_events (
   id bigserial primary key,
   session_id uuid not null references demo_sessions(id) on delete cascade,
-  kind text not null check (kind in ('allowance', 'pitch', 'gift', 'thank_you')),
-  status text not null check (status in ('pending', 'queued', 'sending', 'confirmed', 'failed', 'rejected')),
+  kind text not null check (kind in ('allowance', 'pitch', 'gift', 'thank_you', 'group_gift', 'contribution', 'graduation')),
+  status text not null check (status in ('pending', 'queued', 'sending', 'confirmed', 'failed', 'rejected', 'refunded')),
   ticker text,
   usdc_micro bigint not null default 0,  -- USDC amount in 6-decimal units
   tokens_raw text,                       -- stock units credited (raw B20, 8 decimals)
@@ -32,6 +32,7 @@ create table if not exists demo_events (
   match_micro bigint not null default 0, -- parent match on a pitch, from the family pool
   match_pct int not null default 0,
   voice_path text,                       -- voice thank-you in the private voice-notes bucket
+  chain_ref text,                        -- on-chain id, e.g. a group gift id
   created_at timestamptz not null default now(),
   executed_at timestamptz
 );

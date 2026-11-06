@@ -24,8 +24,8 @@ export type DemoSession = {
 export type DemoEvent = {
   id: number;
   session_id: string;
-  kind: "allowance" | "pitch" | "gift" | "thank_you";
-  status: "pending" | "queued" | "sending" | "confirmed" | "failed" | "rejected";
+  kind: "allowance" | "pitch" | "gift" | "thank_you" | "group_gift" | "contribution" | "graduation";
+  status: "pending" | "queued" | "sending" | "confirmed" | "failed" | "rejected" | "refunded";
   ticker: string | null;
   usdc_micro: number;
   tokens_raw: string | null;
@@ -41,6 +41,7 @@ export type DemoEvent = {
   match_micro: number;
   match_pct: number;
   voice_path: string | null;
+  chain_ref: string | null; // on-chain id, e.g. a group gift id
   created_at: string;
   executed_at: string | null;
 };

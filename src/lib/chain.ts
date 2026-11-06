@@ -138,15 +138,20 @@ export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint, m
   return { hash: receipt.transactionHash, tokensOut: ev?.args.tokensOut ?? 0n, matchUsdc: ev?.args.matchUsdc ?? 0n };
 }
 
-/** Demo gift: the relayer wallet plays Aunty Funmi and pays from its own USDC. */
-export async function giftFromRelayer(kidId: Hash, ticker: Ticker, usdcMicro: bigint, gifterTag: Hash) {
+/** Makes sure the vault may pull `amount` USDC from the relayer. Approves a small, bounded $1 at a time. */
+async function ensureUsdcApproval(amount: bigint) {
   const vault = config.demoVault();
   const usdc = config.usdc();
   const current = await publicClient.readContract({ address: usdc, abi: erc20Abi, functionName: "allowance", args: [relayerAddress(), vault] });
-  if (current < usdcMicro) {
-    // Approve a small, bounded amount ($1) so most gifts need one transaction.
+  if (current < amount) {
     await send(() => wallet().writeContract({ address: usdc, abi: erc20Abi, functionName: "approve", args: [vault, 1_000_000n] }));
   }
+}
+
+/** Demo gift: the relayer wallet plays Aunty Funmi and pays from its own USDC. */
+export async function giftFromRelayer(kidId: Hash, ticker: Ticker, usdcMicro: bigint, gifterTag: Hash) {
+  const vault = config.demoVault();
+  await ensureUsdcApproval(usdcMicro);
   const { minOut } = await quoteMinOut(ticker, usdcMicro);
   const receipt = await send(() =>
     wallet().writeContract({
@@ -222,4 +227,63 @@ export async function groupGift(vault: `0x${string}`, id: bigint) {
 /** Whether a wallet passes the stock's transfer rules (the same check graduation runs on-chain). */
 export async function canReceive(vault: `0x${string}`, token: `0x${string}`, to: `0x${string}`) {
   return publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "canReceive", args: [token, to] });
+}
+
+// ---------------------------------------------------------------- v2 writes (demo: the relayer plays every relative)
+
+/** Opens a group gift for a kid. Returns the on-chain group gift id. */
+export async function openGroupGiftTx(kidId: Hash, ticker: Ticker, targetMicro: bigint) {
+  const receipt = await send(() =>
+    wallet().writeContract({
+      address: config.demoVault(),
+      abi: vaultAbi,
+      functionName: "openGroupGift",
+      args: [kidId, STOCKS[ticker].token, targetMicro],
+    }),
+  );
+  const [ev] = parseEventLogs({ abi: vaultAbi, eventName: "GroupGiftOpened", logs: receipt.logs });
+  if (!ev) throw new Error("GroupGiftOpened event missing");
+  return { hash: receipt.transactionHash, id: ev.args.id };
+}
+
+/** Chips USDC into a group gift's escrow. */
+export async function contributeTx(id: bigint, usdcMicro: bigint, gifterTag: Hash) {
+  await ensureUsdcApproval(usdcMicro);
+  const receipt = await send(() =>
+    wallet().writeContract({ address: config.demoVault(), abi: vaultAbi, functionName: "contributeToGroupGift", args: [id, usdcMicro, gifterTag] }),
+  );
+  return { hash: receipt.transactionHash };
+}
+
+/** Turns a group gift's escrow into shares for the kid (the relayer is the organizer, so it can close it any time). */
+export async function settleGroupGiftTx(id: bigint, ticker: Ticker, raisedMicro: bigint) {
+  const { minOut } = await quoteMinOut(ticker, raisedMicro);
+  const receipt = await send(() =>
+    wallet().writeContract({ address: config.demoVault(), abi: vaultAbi, functionName: "settleGroupGift", args: [id, minOut, deadline()] }),
+  );
+  const [ev] = parseEventLogs({ abi: vaultAbi, eventName: "GroupGiftSettled", logs: receipt.logs });
+  return { hash: receipt.transactionHash, tokensOut: ev?.args.tokensOut ?? 0n };
+}
+
+/** Calls off a group gift and takes the relayer's contributions back. */
+export async function cancelAndRefundTx(id: bigint) {
+  const vault = config.demoVault();
+  const cancel = await send(() => wallet().writeContract({ address: vault, abi: vaultAbi, functionName: "cancelGroupGift", args: [id] }));
+  const refund = await send(() => wallet().writeContract({ address: vault, abi: vaultAbi, functionName: "refundGroupGift", args: [id] }));
+  return { cancelHash: cancel.transactionHash, refundHash: refund.transactionHash };
+}
+
+/** Sends all of a kid's shares and savings to `to` (owner only; in the demo the relayer owns the vault). */
+export async function graduateTx(kidId: Hash, to: `0x${string}`) {
+  const vault = config.demoVault();
+  for (const t of Object.keys(STOCKS) as Ticker[]) {
+    if (!(await canReceive(vault, STOCKS[t].token, to))) throw new Error(`${to} can't receive ${t} under its transfer rules`);
+  }
+  const receipt = await send(() => wallet().writeContract({ address: vault, abi: vaultAbi, functionName: "graduate", args: [kidId, to] }));
+  return { hash: receipt.transactionHash };
+}
+
+export async function graduatedTo(kidId: Hash) {
+  const to = await publicClient.readContract({ address: config.demoVault(), abi: vaultAbi, functionName: "graduatedTo", args: [kidId] });
+  return to === "0x0000000000000000000000000000000000000000" ? null : to;
 }

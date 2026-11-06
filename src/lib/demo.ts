@@ -3,7 +3,23 @@ import { createHash, randomUUID } from "node:crypto";
 import { keccak256, stringToHex, toHex, type Hash } from "viem";
 import { config, txUrl } from "./config";
 import { db, type DemoEvent, type DemoSession } from "./db";
-import { demoFunds, giftFromRelayer, kidHoldings, pitchBuy, quoteMinOut, releaseAllowance, setAndReleaseAllowance, uiMultipliers, type Holdings } from "./chain";
+import {
+  cancelAndRefundTx,
+  contributeTx,
+  demoFunds,
+  giftFromRelayer,
+  graduateTx,
+  kidHoldings,
+  openGroupGiftTx,
+  pitchBuy,
+  quoteMinOut,
+  relayerAddress,
+  releaseAllowance,
+  setAndReleaseAllowance,
+  settleGroupGiftTx,
+  uiMultipliers,
+  type Holdings,
+} from "./chain";
 import { STOCKS, type Ticker } from "./stocks";
 
 export class DemoError extends Error {
@@ -12,7 +28,7 @@ export class DemoError extends Error {
   }
 }
 
-const SPEND_KINDS = ["pitch", "gift"] as const;
+const SPEND_KINDS = ["pitch", "gift", "contribution"] as const;
 const LIVE_STATUSES = ["queued", "sending", "confirmed"] as const;
 
 // ---------------------------------------------------------------- time (Lagos is UTC+1, no DST)
@@ -135,7 +151,9 @@ export type DemoState = {
 
 /** Change since purchase: the same USDC buys fewer tokens now if the price went up. */
 async function scoresFor(evs: DemoEvent[]): Promise<Score[]> {
-  const bought = evs.filter((e) => (e.kind === "pitch" || e.kind === "gift") && e.status === "confirmed" && e.tokens_raw && e.ticker);
+  const bought = evs.filter(
+    (e) => (e.kind === "pitch" || e.kind === "gift" || e.kind === "group_gift") && e.status === "confirmed" && e.tokens_raw && e.ticker,
+  );
   const out = await Promise.all(
     bought.map(async (e) => {
       try {
@@ -220,7 +238,9 @@ export const MATCH_CHOICES = [0, 25, 50, 100];
 
 export async function approvePitch(session: DemoSession, eventId: number, matchPct = 0) {
   if (!MATCH_CHOICES.includes(matchPct)) throw new DemoError("Pick a match of 0%, 25%, 50% or 100%.");
-  const first = (await events(session.id)).find((e) => e.kind === "allowance");
+  const all = await events(session.id);
+  if (all.some((e) => e.kind === "graduation" && e.status !== "failed")) throw new DemoError("Tobi has graduated. His shares are in his own wallet now.");
+  const first = all.find((e) => e.kind === "allowance");
   if (first?.status === "sending") throw new DemoError("Tobi's allowance is still landing on Base. Try again in a few seconds.", 409);
   if (first?.status === "failed") throw new DemoError("Tobi's allowance didn't land, so there's nothing to spend. Tap Reset demo.", 409);
   const matchBps = BigInt(matchPct * 100);
@@ -262,8 +282,7 @@ export const OCCASIONS = ["Birthday", "Good grades", "Christmas", "Eid", "Gradua
 export async function createGift(session: DemoSession, ticker: Ticker, occasion: string, message: string) {
   if (session.morning) throw new DemoError("It's already morning in Lagos. Reset the demo to send another overnight gift.");
   if (!OCCASIONS.includes(occasion as (typeof OCCASIONS)[number])) throw new DemoError("Pick an occasion.");
-  const existing = (await events(session.id)).find((e) => e.kind === "gift" && e.status !== "failed");
-  if (existing) throw new DemoError("Aunty Funmi has already sent tonight's gift.");
+  if (tonightsGift(await events(session.id))) throw new DemoError("Aunty Funmi has already sent tonight's gift.");
   await assertCanSpend(session, config.demo.giftMicro);
   const { error } = await db().from("demo_events").insert({
     session_id: session.id,
@@ -276,6 +295,100 @@ export async function createGift(session: DemoSession, ticker: Ticker, occasion:
     usdc_micro: Number(config.demo.giftMicro),
   });
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------- relatives: group gift (escrow on-chain)
+
+const GROUP_SHARE = () => config.demo.giftMicro / 2n; // each relative chips in half the target
+
+/** The one gift a demo session gets tonight: a single gift or a group gift (not failed or called off). */
+function tonightsGift(evs: DemoEvent[]) {
+  return evs.find((e) => (e.kind === "gift" || e.kind === "group_gift") && e.status !== "failed" && e.status !== "rejected");
+}
+
+const openGroup = (evs: DemoEvent[]) => evs.find((e) => e.kind === "group_gift" && (e.status === "pending" || e.status === "queued"));
+
+async function recordContribution(session: DemoSession, group: DemoEvent, gifter: string) {
+  const amount = GROUP_SHARE();
+  const { data: row, error } = await db()
+    .from("demo_events")
+    .insert({ session_id: session.id, kind: "contribution", status: "sending", gifter_name: gifter, usdc_micro: Number(amount), ref_event_id: group.id })
+    .select()
+    .single();
+  if (error) throw error;
+  try {
+    const { hash } = await contributeTx(BigInt(group.chain_ref!), amount, stringToHex(gifter, { size: 32 }));
+    await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", row.id);
+  } catch (err) {
+    await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", row.id);
+    throw new DemoError(`${gifter}'s contribution didn't go through, and no money moved. Please try again.`, 503);
+  }
+}
+
+/** Aunty Funmi opens a group gift on-chain and chips in the first half. */
+export async function startGroupGift(session: DemoSession, ticker: Ticker, occasion: string, message: string) {
+  if (session.morning) throw new DemoError("It's already morning in Lagos. Reset the demo to send another overnight gift.");
+  if (!OCCASIONS.includes(occasion as (typeof OCCASIONS)[number])) throw new DemoError("Pick an occasion.");
+  if (tonightsGift(await events(session.id))) throw new DemoError("Aunty Funmi has already sent tonight's gift.");
+  await assertCanSpend(session, GROUP_SHARE());
+  const target = config.demo.giftMicro;
+  const { data: group, error } = await db()
+    .from("demo_events")
+    .insert({
+      session_id: session.id,
+      kind: "group_gift",
+      status: "sending",
+      ticker,
+      occasion,
+      message: message.trim().slice(0, 200) || null,
+      gifter_name: "Aunty Funmi and Uncle Dayo",
+      usdc_micro: Number(target),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  try {
+    const { id } = await openGroupGiftTx(session.kid_id as Hash, ticker, target);
+    await db().from("demo_events").update({ chain_ref: id.toString() }).eq("id", group.id);
+    group.chain_ref = id.toString();
+  } catch (err) {
+    await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", group.id);
+    throw new DemoError("The group gift couldn't be started, and no money moved. Please try again.", 503);
+  }
+  await db().from("demo_events").update({ status: "pending" }).eq("id", group.id);
+  await recordContribution(session, group as DemoEvent, "Aunty Funmi");
+}
+
+/** Uncle Dayo in Houston chips in the second half. Reaching the target queues it for the night shift. */
+export async function chipIn(session: DemoSession) {
+  if (session.morning) throw new DemoError("It's already morning in Lagos. The group gift has been delivered.");
+  const evs = await events(session.id);
+  const group = openGroup(evs);
+  if (!group || !group.chain_ref) throw new DemoError("Aunty Funmi hasn't started a group gift yet.");
+  if (evs.some((e) => e.kind === "contribution" && e.ref_event_id === group.id && e.gifter_name === "Uncle Dayo" && e.status !== "failed")) {
+    throw new DemoError("Uncle Dayo has already chipped in.");
+  }
+  await assertCanSpend(session, GROUP_SHARE());
+  await recordContribution(session, group, "Uncle Dayo");
+  await db().from("demo_events").update({ status: "queued" }).eq("id", group.id).eq("status", "pending");
+}
+
+/** Calls the group gift off on-chain and refunds everyone's contribution. */
+export async function callOffGroupGift(session: DemoSession) {
+  if (session.morning) throw new DemoError("It's morning: the group gift has already been turned into shares.");
+  const evs = await events(session.id);
+  const group = openGroup(evs);
+  if (!group || !group.chain_ref) throw new DemoError("There's no group gift to call off.");
+  const { data: claimed } = await db().from("demo_events").update({ status: "sending" }).eq("id", group.id).in("status", ["pending", "queued"]).select();
+  if (!claimed?.length) throw new DemoError("That group gift was already handled.");
+  try {
+    const { refundHash } = await cancelAndRefundTx(BigInt(group.chain_ref));
+    await db().from("demo_events").update({ status: "rejected", tx_hash: refundHash, executed_at: new Date().toISOString() }).eq("id", group.id);
+    await db().from("demo_events").update({ status: "refunded" }).eq("ref_event_id", group.id).eq("kind", "contribution").eq("status", "confirmed");
+  } catch (err) {
+    await db().from("demo_events").update({ status: group.status, error: String(err).slice(0, 300) }).eq("id", group.id);
+    throw new DemoError("Calling it off didn't go through. Everyone's money is still safe in escrow. Please try again.", 503);
+  }
 }
 
 // ---------------------------------------------------------------- the night shift
@@ -291,7 +404,29 @@ export async function skipToMorning(session: DemoSession) {
   if (!flipped?.length) return;
 
   const kidId = session.kid_id as Hash;
-  const queued = (await events(session.id)).filter((e) => e.kind === "gift" && e.status === "queued");
+  const evs = await events(session.id);
+  const queued = evs.filter((e) => e.kind === "gift" && e.status === "queued");
+  // Aunty Funmi organised the group gift, so it can be closed with whatever was raised, even if Uncle Dayo didn't chip in.
+  const groups = evs.filter((e) => e.kind === "group_gift" && (e.status === "pending" || e.status === "queued") && e.chain_ref);
+
+  const deliverGroupGifts = async () => {
+    for (const g of groups) {
+      const raised = evs
+        .filter((c) => c.kind === "contribution" && c.ref_event_id === g.id && c.status === "confirmed")
+        .reduce((sum, c) => sum + BigInt(c.usdc_micro), 0n);
+      if (raised === 0n) continue;
+      await db().from("demo_events").update({ status: "sending" }).eq("id", g.id);
+      try {
+        const { hash, tokensOut } = await settleGroupGiftTx(BigInt(g.chain_ref!), g.ticker as Ticker, raised);
+        await db()
+          .from("demo_events")
+          .update({ status: "confirmed", tx_hash: hash, tokens_raw: tokensOut.toString(), executed_at: new Date().toISOString() })
+          .eq("id", g.id);
+      } catch (err) {
+        await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", g.id);
+      }
+    }
+  };
 
   const deliverGifts = async () => {
     for (const gift of queued) {
@@ -324,7 +459,7 @@ export async function skipToMorning(session: DemoSession) {
   };
 
   // Independent transactions from one wallet; viem's nonce manager keeps their nonces in order.
-  await Promise.all([deliverGifts(), midnightAllowance()]);
+  await Promise.all([deliverGifts(), deliverGroupGifts(), midnightAllowance()]);
 }
 
 // ---------------------------------------------------------------- thank-you
@@ -348,7 +483,7 @@ export async function thankYou(session: DemoSession, giftId: number, text: strin
     if (voice.size > MAX_VOICE_BYTES) throw new DemoError("Keep the voice note under 30 seconds.");
   }
   const evs = await events(session.id);
-  const gift = evs.find((e) => e.id === giftId && e.kind === "gift" && e.status === "confirmed");
+  const gift = evs.find((e) => e.id === giftId && (e.kind === "gift" || e.kind === "group_gift") && e.status === "confirmed");
   if (!gift) throw new DemoError("That gift hasn't arrived yet.");
   if (evs.some((e) => e.kind === "thank_you" && e.ref_event_id === giftId)) throw new DemoError("Tobi already said thank you.");
   let voicePath: string | null = null;
@@ -372,6 +507,33 @@ export async function thankYou(session: DemoSession, giftId: number, text: strin
   if (error) throw error;
 }
 
+// ---------------------------------------------------------------- graduation (fast-forward to 18)
+
+/**
+ * Mum graduates Tobi: every share and his savings move out of the family vault in one transaction.
+ * In the demo, "Tobi's own wallet" is Allowance's demo wallet, so the cents aren't sent to an address nobody controls.
+ */
+export async function graduate(session: DemoSession) {
+  if (!session.morning) throw new DemoError("Graduation comes after the Morning Report. Skip to morning first.");
+  const evs = await events(session.id);
+  if (evs.some((e) => e.kind === "graduation" && e.status !== "failed")) throw new DemoError("Tobi has already graduated.");
+  if (evs.some((e) => e.status === "sending")) throw new DemoError("Something is still landing on Base. Try again in a few seconds.", 409);
+  const to = relayerAddress();
+  const { data: row, error } = await db()
+    .from("demo_events")
+    .insert({ session_id: session.id, kind: "graduation", status: "sending", message: to })
+    .select()
+    .single();
+  if (error) throw error;
+  try {
+    const { hash } = await graduateTx(session.kid_id as Hash, to);
+    await db().from("demo_events").update({ status: "confirmed", tx_hash: hash, executed_at: new Date().toISOString() }).eq("id", row.id);
+  } catch (err) {
+    await db().from("demo_events").update({ status: "failed", error: String(err).slice(0, 300) }).eq("id", row.id);
+    throw new DemoError("Graduation didn't go through, and nothing moved. Please try again.", 503);
+  }
+}
+
 // ---------------------------------------------------------------- replay (cap fallback)
 
 export async function replay() {
@@ -380,7 +542,7 @@ export async function replay() {
     .select("kind, ticker, usdc_micro, tokens_raw, gifter_name, tx_hash, executed_at")
     .eq("status", "confirmed")
     .not("tx_hash", "is", null)
-    .in("kind", ["pitch", "gift", "allowance"])
+    .in("kind", ["pitch", "gift", "group_gift", "allowance", "graduation"])
     .order("executed_at", { ascending: false })
     .limit(6);
   return (data ?? []).map((e) => ({

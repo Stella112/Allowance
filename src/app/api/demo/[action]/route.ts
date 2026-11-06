@@ -2,13 +2,17 @@ import { cookies, headers } from "next/headers";
 import { after } from "next/server";
 import {
   approvePitch,
+  callOffGroupGift,
+  chipIn,
   createGift,
   createPitch,
   DemoError,
   getSession,
+  graduate,
   ipHashOf,
   replay,
   skipToMorning,
+  startGroupGift,
   startSession,
   state,
   thankYou,
@@ -90,6 +94,20 @@ export async function POST(req: Request, ctx: RouteContext<"/api/demo/[action]">
         await createGift(session, body.ticker, str(body.occasion, "occasion"), typeof body.message === "string" ? body.message : "");
         break;
       }
+      case "group-gift": {
+        if (!isTicker(body.ticker)) throw new DemoError("Pick Apple or Nvidia.");
+        await startGroupGift(session, body.ticker, str(body.occasion, "occasion"), typeof body.message === "string" ? body.message : "");
+        break;
+      }
+      case "chip-in":
+        await chipIn(session);
+        break;
+      case "call-off":
+        await callOffGroupGift(session);
+        break;
+      case "graduate":
+        await graduate(session);
+        break;
       case "skip-to-morning":
         await skipToMorning(session);
         break;
