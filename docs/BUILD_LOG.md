@@ -23,4 +23,5 @@ One line per task, describing how AI was used. This feeds the "AI tools used" su
   - The kid's real Morning Report: gifts, approved pitches with match and scorecard, allowances, dividends, a family leaderboard, a shareable image, and text or voice thank-yous that relatives hear on their link.
   - Fixed a production-build break: a URL-reading page needs Suspense under Cache Components.
   `next build` passes. Database: supabase/005_dividends.sql.
+- 2026-11-07: The Coinbase paymaster still refused to sponsor createVault, both via useCdpPaymaster and via the project's paymaster URL; the bundler reported a balance of 0. With the owner's approval, Claude Code sent 0.00006 ETH from the hot wallet to the owner's parent smart account so the vault can be created (tx 0xd265351440c7cdc01c3b5ec0044099000301d64fa948f1abc8034d87d31046ad).
 
