@@ -1,21 +1,31 @@
 @import "tailwindcss";
 
-/* Night shift palette: deep navy + moonlight for evening/night, warm sunrise for mornings. */
+/*
+ * Allowance: playful premium fintech.
+ * Warm cream canvas, violet for actions, mint for savings, coral and sunny yellow for highlights, deep ink text.
+ * The token names are kept from the first "night shift" palette so every screen picks up the new look:
+ *   night-950 = page canvas, night-900 = cards, night-800/700 = soft violet panels,
+ *   moon = main text, moon-dim = secondary text, star = primary action (violet).
+ */
 :root {
-  --night-950: #070b1f;
-  --night-900: #0d1433;
-  --night-800: #16204a;
-  --night-700: #223066;
-  --moon: #e8ecff;
-  --moon-dim: #aab3d9;
-  --star: #ffd88a;
-  --sunrise-50: #fff8ef;
-  --sunrise-100: #ffecd6;
-  --sunrise-300: #ffbf80;
-  --sunrise-500: #ff8a3d;
-  --sunrise-700: #b4461a;
-  --ink: #2a1a10;
-  --focus: #ffd88a;
+  --night-950: #f8f6f0; /* warm cream canvas */
+  --night-900: #ffffff; /* cards */
+  --night-800: #f1edfd; /* soft violet panel */
+  --night-700: #e3dafb; /* selected / pressed violet */
+  --moon: #25243a; /* deep ink text */
+  --moon-dim: #6b6884; /* secondary text */
+  --star: #7656e8; /* playful violet: primary actions */
+  --mint: #b9e9d0; /* savings */
+  --mint-ink: #1f6b4a;
+  --sunny: #ffd979; /* highlights */
+  --sunrise-50: #fff7f2;
+  --sunrise-100: #ffe6dd; /* peach */
+  --sunrise-300: #ffb9a8; /* peach coral */
+  --sunrise-500: #ff8f73;
+  --sunrise-700: #c24f36;
+  --ink: #25243a;
+  --focus: #7656e8;
+  --shadow: 0 1px 2px rgb(37 36 58 / 0.06), 0 8px 24px -12px rgb(118 86 232 / 0.25);
 }
 
 @theme inline {
@@ -26,20 +36,172 @@
   --color-moon: var(--moon);
   --color-moon-dim: var(--moon-dim);
   --color-star: var(--star);
+  --color-mint: var(--mint);
+  --color-mint-ink: var(--mint-ink);
+  --color-sunny: var(--sunny);
   --color-sunrise-50: var(--sunrise-50);
   --color-sunrise-100: var(--sunrise-100);
   --color-sunrise-300: var(--sunrise-300);
   --color-sunrise-500: var(--sunrise-500);
   --color-sunrise-700: var(--sunrise-700);
   --color-ink: var(--ink);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-nunito);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--night-950);
+  background:
+    radial-gradient(900px 500px at 100% -10%, rgb(118 86 232 / 0.1), transparent 60%),
+    radial-gradient(700px 400px at -10% 10%, rgb(255 185 168 / 0.18), transparent 60%),
+    var(--night-950);
+  background-attachment: fixed;
   color: var(--moon);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-nunito), system-ui, sans-serif;
+}
+
+h1,
+h2 {
+  letter-spacing: -0.02em;
+}
+
+/* Text on the violet primary buttons */
+.text-night-950 {
+  color: #ffffff;
+}
+.bg-star {
+  background: linear-gradient(180deg, #8a6df0, #7656e8);
+  box-shadow: 0 6px 16px -6px rgb(118 86 232 / 0.6);
+}
+
+/* Cards: soft lift and a gentle shadow */
+section.rounded-2xl,
+article.rounded-2xl,
+article.rounded-xl,
+div.rounded-2xl,
+form.rounded-2xl {
+  box-shadow: var(--shadow);
+}
+
+/* Everything floats in as it appears */
+main > *,
+main section > *,
+main article {
+  animation: float-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+main > *:nth-child(2) {
+  animation-delay: 0.04s;
+}
+main > *:nth-child(3) {
+  animation-delay: 0.08s;
+}
+main > *:nth-child(4) {
+  animation-delay: 0.12s;
+}
+main > *:nth-child(5) {
+  animation-delay: 0.16s;
+}
+main > *:nth-child(n + 6) {
+  animation-delay: 0.2s;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Buttons and links feel bouncy */
+button,
+a.rounded-2xl,
+a.rounded-xl,
+a.rounded-lg {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    filter 0.15s ease;
+}
+button:not(:disabled):hover,
+a.rounded-2xl:hover,
+a.rounded-xl:hover,
+a.rounded-lg:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+}
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+}
+button[aria-pressed="true"] {
+  animation: pop 0.25s ease;
+}
+
+@keyframes pop {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* Big emoji and avatars wiggle and bob a little */
+.text-5xl,
+.text-4xl {
+  display: inline-block;
+  animation: bob 3.2s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  25% {
+    transform: translateY(-4px) rotate(-4deg);
+  }
+  75% {
+    transform: translateY(-2px) rotate(3deg);
+  }
+}
+
+/* Money numbers count in with a little shine */
+.text-3xl.font-bold {
+  background: linear-gradient(90deg, var(--ink), var(--star), var(--ink));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 4s ease-in-out infinite;
+}
+@keyframes shine {
+  0%,
+  100% {
+    background-position: 0% 0;
+  }
+  50% {
+    background-position: 100% 0;
+  }
+}
+
+/* Progress bars fill smoothly */
+[role="progressbar"] > div {
+  transition: width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: linear-gradient(90deg, var(--mint), #7fd6ad);
+}
+
+/* Inputs: soft, rounded, violet focus */
+input,
+select,
+textarea {
+  border: 1.5px solid #e6e1f5;
+  transition: border-color 0.15s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--star);
 }
 
 :focus-visible {
@@ -53,6 +215,7 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
