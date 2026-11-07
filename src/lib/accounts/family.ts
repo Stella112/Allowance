@@ -6,6 +6,7 @@ import { config, txUrl } from "../config";
 import { db } from "../db";
 import { isTicker, type Ticker } from "../stocks";
 import { AccountError } from "./errors";
+import { giftLinksOf } from "./gifts";
 import { getKid, listKids, type Kid } from "./kids";
 import { verifyApproval } from "./passkeys";
 import type { Parent } from "./parents";
@@ -50,7 +51,7 @@ async function kidChainState(vault: `0x${string}` | null, kid: Kid) {
 export async function familyState(parent: Parent) {
   const vault = parent.vault ? addr(parent.vault) : null;
   const kids = await listKids(parent.id);
-  const [walletUsdc, info, kidStates, pitches] = await Promise.all([
+  const [walletUsdc, info, kidStates, pitches, links] = await Promise.all([
     usdcBalance(addr(parent.wallet)).catch(() => null),
     vault ? vaultInfo(vault).catch(() => null) : Promise.resolve(null),
     Promise.all(kids.map((k) => kidChainState(vault, k))),
@@ -65,6 +66,7 @@ export async function familyState(parent: Parent) {
           .order("created_at", { ascending: false })
           .limit(30)
       : Promise.resolve({ data: [] }),
+    giftLinksOf(parent.id),
   ]);
   return {
     parent: { email: parent.email, wallet: parent.wallet, vault: parent.vault, timezone: parent.timezone },
@@ -74,6 +76,7 @@ export async function familyState(parent: Parent) {
     familyUsdcMicro: info?.familyUsdc.toString() ?? null,
     kids: kids.map((k, i) => ({ ...k, ...kidStates[i], periodSec: PERIOD_SEC[k.allowance_period].toString() })),
     pitches: ((pitches.data ?? []) as Pitch[]).map(withTx),
+    giftLinks: links.map((l) => ({ code: l.code, kid_id: l.kid_id, kind: l.kind, ticker: l.ticker, target_micro: l.target_micro })),
   };
 }
 

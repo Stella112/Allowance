@@ -1,5 +1,6 @@
 import { AccountError, toResponse } from "@/lib/accounts/errors";
 import { approvePitch, confirmVault, declinePitch, familyState } from "@/lib/accounts/family";
+import { createGiftLink } from "@/lib/accounts/gifts";
 import { addKid, kidOfParent, resetPin, updateKidSettings } from "@/lib/accounts/kids";
 import { approvalOptions } from "@/lib/accounts/passkeys";
 import { requireParent } from "@/lib/accounts/parents";
@@ -36,6 +37,10 @@ export async function POST(req: Request) {
       case "approve":
         await approvePitch(parent, body.pitchId, body.response as never);
         break;
+      case "gift-link": {
+        const code = await createGiftLink(parent, { kidId: body.kidId, kind: body.kind, ticker: body.ticker, target: body.target });
+        return Response.json({ ...(await familyState(parent)), newLink: code });
+      }
       case "decline":
         await declinePitch(parent, body.pitchId);
         break;

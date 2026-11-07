@@ -48,6 +48,7 @@ type FamilyState = {
   familyUsdcMicro: string | null;
   kids: KidRow[];
   pitches: PitchRow[];
+  giftLinks: { code: string; kid_id: string; kind: "single" | "group"; ticker: Ticker | null; target_micro: number | null }[];
 };
 
 const COMPANY: Record<Ticker, string> = { AAPL: "🍎 Apple", NVDA: "🎮 Nvidia" };
@@ -222,6 +223,15 @@ export default function Family() {
               }
             />
           ))}
+          <GiftLinks
+            state={state}
+            busy={!!busy}
+            onCreate={(input) =>
+              run(input.kind === "group" ? "Opening the group gift on Base…" : "Making a gift link…", async () =>
+                setState(await family({ action: "gift-link", ...input })),
+              )
+            }
+          />
           <AddKid busy={!!busy} onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />
           <Link href="/kid" className="rounded-xl bg-night-800 px-4 py-3 text-center font-semibold">
             👦🏾 Hand the phone to a kid (switch profile)
@@ -515,5 +525,94 @@ function AddKid({ busy, first, onAdd }: { busy: boolean; first?: boolean; onAdd:
         Add {nickname || "child"}
       </button>
     </form>
+  );
+}
+
+function GiftLinks({
+  state,
+  busy,
+  onCreate,
+}: {
+  state: FamilyState;
+  busy: boolean;
+  onCreate: (input: { kidId: string; kind: "single" | "group"; ticker?: Ticker; target?: number }) => void;
+}) {
+  const [kidId, setKidId] = useState(state.kids[0]?.id ?? "");
+  const [kind, setKind] = useState<"single" | "group">("single");
+  const [ticker, setTicker] = useState<Ticker>("AAPL");
+  const [target, setTarget] = useState("5");
+  const [copied, setCopied] = useState<string | null>(null);
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const kidName = (id: string) => state.kids.find((k) => k.id === id)?.nickname ?? "your child";
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
+      <h2 className="text-lg font-semibold">✈️ Gift links for family abroad</h2>
+      <p className="text-sm text-moon-dim">
+        Share a link on WhatsApp. Relatives open it, pick a company and pay in USDC from their own wallet. No Allowance account needed. Group links let several
+        relatives chip in toward one target.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <select aria-label="For which child" value={kidId} onChange={(e) => setKidId(e.target.value)} className="rounded-lg bg-white p-2 text-ink">
+          {state.kids.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.avatar} {k.nickname}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Gift type" value={kind} onChange={(e) => setKind(e.target.value as "single" | "group")} className="rounded-lg bg-white p-2 text-ink">
+          <option value="single">Gift link</option>
+          <option value="group">Group gift link</option>
+        </select>
+        {kind === "group" && (
+          <>
+            <select aria-label="Company" value={ticker} onChange={(e) => setTicker(e.target.value as Ticker)} className="rounded-lg bg-white p-2 text-ink">
+              <option value="AAPL">🍎 Apple</option>
+              <option value="NVDA">🎮 Nvidia</option>
+            </select>
+            <label className="flex items-center gap-1 text-sm">
+              Target $
+              <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="w-20 rounded-lg bg-white p-2 text-ink" />
+            </label>
+          </>
+        )}
+        <button
+          type="button"
+          disabled={busy || !kidId}
+          onClick={() => onCreate(kind === "group" ? { kidId, kind, ticker, target: Number(target) } : { kidId, kind })}
+          className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60"
+        >
+          Make link
+        </button>
+      </div>
+      {state.giftLinks.length > 0 && (
+        <ul className="flex flex-col gap-2 text-sm">
+          {state.giftLinks.map((l) => {
+            const url = `${origin}/gift/${l.code}`;
+            const text = `Send ${kidName(l.kid_id)} a slice of a real company while they sleep 🌙 ${url}`;
+            return (
+              <li key={l.code} className="flex flex-wrap items-center gap-2 rounded-lg bg-night-800 p-2">
+                <span className="flex-1">
+                  {l.kind === "group" ? `👨🏾‍👩🏾‍👧🏾 Group gift (${l.ticker === "NVDA" ? "Nvidia" : "Apple"}, target ${usd(l.target_micro)})` : "🎁 Gift link"} for{" "}
+                  {kidName(l.kid_id)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(url).then(() => setCopied(l.code));
+                  }}
+                  className="rounded-lg bg-night-700 px-2 py-1"
+                >
+                  {copied === l.code ? "Copied ✓" : "Copy"}
+                </button>
+                <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="rounded-lg bg-[#25D366] px-2 py-1 font-semibold text-night-950">
+                  WhatsApp
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

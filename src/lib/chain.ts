@@ -40,6 +40,8 @@ const vaultAbi = parseAbi([
   "function canReceive(address token, address to) view returns (bool)",
   "event GroupGiftOpened(uint256 indexed id, bytes32 indexed kidId, address indexed token, address organizer, uint256 target)",
   "event GroupGiftSettled(uint256 indexed id, bytes32 indexed kidId, address indexed token, uint256 usdcIn, uint256 tokensOut)",
+  "event GroupGiftContributed(uint256 indexed id, address indexed from, bytes32 gifterTag, uint256 amount, uint256 raised)",
+  "event GroupGiftRefunded(uint256 indexed id, address indexed to, uint256 amount)",
   "event Graduated(bytes32 indexed kidId, address indexed to, uint256 usdc)",
 ]);
 
@@ -230,10 +232,10 @@ export async function canReceive(vault: `0x${string}`, token: `0x${string}`, to:
 // ---------------------------------------------------------------- v2 writes (demo: the relayer plays every relative)
 
 /** Opens a group gift for a kid. Returns the on-chain group gift id. */
-export async function openGroupGiftTx(kidId: Hash, ticker: Ticker, targetMicro: bigint) {
+export async function openGroupGiftTx(kidId: Hash, ticker: Ticker, targetMicro: bigint, vault: `0x${string}` = config.demoVault()) {
   const receipt = await send(() =>
     wallet().writeContract({
-      address: config.demoVault(),
+      address: vault,
       abi: vaultAbi,
       functionName: "openGroupGift",
       args: [kidId, STOCKS[ticker].token, targetMicro],
@@ -254,10 +256,10 @@ export async function contributeTx(id: bigint, usdcMicro: bigint, gifterTag: Has
 }
 
 /** Turns a group gift's escrow into shares for the kid (the relayer is the organizer, so it can close it any time). */
-export async function settleGroupGiftTx(id: bigint, ticker: Ticker, raisedMicro: bigint) {
+export async function settleGroupGiftTx(id: bigint, ticker: Ticker, raisedMicro: bigint, vault: `0x${string}` = config.demoVault()) {
   const { minOut } = await quoteMinOut(ticker, raisedMicro);
   const receipt = await send(() =>
-    wallet().writeContract({ address: config.demoVault(), abi: vaultAbi, functionName: "settleGroupGift", args: [id, minOut, deadline()] }),
+    wallet().writeContract({ address: vault, abi: vaultAbi, functionName: "settleGroupGift", args: [id, minOut, deadline()] }),
   );
   const [ev] = parseEventLogs({ abi: vaultAbi, eventName: "GroupGiftSettled", logs: receipt.logs });
   return { hash: receipt.transactionHash, tokensOut: ev?.args.tokensOut ?? 0n };
@@ -313,4 +315,29 @@ export async function allowanceSchedule(vault: `0x${string}`, kidId: Hash) {
 
 export async function usdcBalance(address: `0x${string}`) {
   return publicClient.readContract({ address: config.usdc(), abi: erc20Abi, functionName: "balanceOf", args: [address] });
+}
+
+// ---------------------------------------------------------------- gifts paid from a relative's own wallet
+
+/**
+ * Reads a confirmed transaction and returns the gift or group-gift contribution it made to `vault` for `kidId`
+ * (or for group gift `groupId`). The server records gifts only from what the chain says, never from the browser.
+ */
+export async function readGiftTx(hash: Hash, vault: `0x${string}`, kidId: Hash, groupId: bigint | null) {
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000, pollingInterval: 1_000 });
+  if (receipt.status !== "success") throw new Error("Transaction reverted");
+  const logs = receipt.logs.filter((l) => l.address.toLowerCase() === vault.toLowerCase());
+  const [gift] = parseEventLogs({ abi: vaultAbi, eventName: "GiftReceived", logs }).filter((e) => e.args.kidId.toLowerCase() === kidId.toLowerCase());
+  if (gift) {
+    return { kind: "gift" as const, from: gift.args.from, token: gift.args.token, usdcIn: gift.args.usdcIn, tokensOut: gift.args.tokensOut };
+  }
+  if (groupId !== null) {
+    const [c] = parseEventLogs({ abi: vaultAbi, eventName: "GroupGiftContributed", logs }).filter((e) => e.args.id === groupId);
+    if (c) return { kind: "contribution" as const, from: c.args.from, token: null, usdcIn: c.args.amount, tokensOut: 0n };
+  }
+  return null;
+}
+
+export async function contributionOf(vault: `0x${string}`, groupId: bigint, who: `0x${string}`) {
+  return publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "contributionOf", args: [groupId, who] });
 }
