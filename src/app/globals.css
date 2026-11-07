@@ -214,8 +214,117 @@ textarea:focus {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* Keep the gentle illustration loops, but slow them down; skip the entrance/bounce motion. */
+  main > *,
+  main section > *,
+  main article,
+  button[aria-pressed="true"] {
+    animation: none !important;
+  }
+  .night-scene * {
+    animation-duration: 12s !important;
+  }
 }
+
+/* ---------- Night scene illustration ---------- */
+.night-scene .ns-twinkle {
+  animation: ns-twinkle 2.4s ease-in-out infinite;
+}
+@keyframes ns-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.night-scene .ns-float {
+  animation: ns-float 6s ease-in-out infinite;
+}
+@keyframes ns-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.night-scene .ns-plane {
+  animation: ns-plane 9s linear infinite;
+}
+@keyframes ns-plane {
+  0% { transform: translate(-140px, 150px); }
+  100% { transform: translate(720px, 30px); }
+}
+.night-scene .ns-swing {
+  transform-origin: 40px 44px;
+  animation: ns-swing 1.6s ease-in-out infinite;
+}
+@keyframes ns-swing {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+.night-scene .ns-breathe {
+  transform-origin: 110px 190px;
+  animation: ns-breathe 3.5s ease-in-out infinite;
+}
+@keyframes ns-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.04); }
+}
+.night-scene .ns-z {
+  animation: ns-z 3s ease-in infinite;
+}
+@keyframes ns-z {
+  0% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(18px, -30px); }
+}
+.night-scene .ns-coin {
+  animation: ns-coin 3.3s cubic-bezier(0.5, 0, 0.75, 0) infinite;
+}
+@keyframes ns-coin {
+  0% { opacity: 0; transform: translateY(-40px); }
+  15% { opacity: 1; }
+  70% { opacity: 1; transform: translateY(110px); }
+  80%, 100% { opacity: 0; transform: translateY(110px); }
+}
+.night-scene .ns-fill {
+  transform-origin: 60px 152px;
+  animation: ns-fill 3.3s ease-in-out infinite;
+}
+@keyframes ns-fill {
+  0%, 60% { transform: scaleY(1); }
+  75% { transform: scaleY(1.12); }
+  100% { transform: scaleY(1); }
+}
+.night-scene .ns-wave {
+  animation: ns-wave 1.4s ease-in-out infinite;
+}
+@keyframes ns-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-22deg); }
+}
+.night-scene .ns-glow {
+  animation: ns-twinkle 2s ease-in-out infinite;
+}
+.night-scene .ns-pop {
+  animation: ns-pop 5s ease-in-out infinite;
+}
+@keyframes ns-pop {
+  0%, 15% { opacity: 0; transform: translate(370px, 180px) scale(0.8); }
+  25%, 85% { opacity: 1; transform: translate(370px, 168px) scale(1); }
+  100% { opacity: 0; transform: translate(370px, 168px) scale(1); }
+}
+
+/* Hero phone gently floats; stickers sway */
+.float-slow {
+  animation: ns-float 5s ease-in-out infinite;
+}
+.sway {
+  animation: sway 3.5s ease-in-out infinite;
+}
+@keyframes sway {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+
+/* SVG parts pivot around their own shape */
+.night-scene .ns-swing { transform-box: fill-box; transform-origin: 50% 0%; }
+.night-scene .ns-wave { transform-box: fill-box; transform-origin: 0% 100%; }
+.night-scene .ns-breathe,
+.night-scene .ns-fill { transform-box: fill-box; transform-origin: 50% 100%; }

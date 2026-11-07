@@ -1,14 +1,7 @@
 import Link from "next/link";
+import NightScene from "@/components/NightScene";
 
 /* Small UI pieces drawn in HTML so the page shows the real product, not stock art. */
-function Phone({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative mx-auto w-[300px] rounded-[2.8rem] border-[10px] border-ink bg-[#F8F6F0] p-4 shadow-2xl">
-      <div className="mx-auto mb-4 h-1.5 w-20 rounded-full bg-ink/20" />
-      {children}
-    </div>
-  );
-}
 const Sticker = ({ className, children }: { className: string; children: React.ReactNode }) => (
   <span className={`absolute z-20 rounded-2xl px-3 py-2 text-sm font-extrabold text-ink shadow-lg ${className}`}>{children}</span>
 );
@@ -170,38 +163,13 @@ export default function Home() {
           </div>
           <p className="mt-3 text-sm text-moon-dim">No wallet or sign-up for the demo. Real Base transactions, tiny amounts paid by us.</p>
 
-          <div className="relative mx-auto mt-14 w-fit">
-            <Sticker className="-left-28 top-16 rotate-[-10deg] bg-[#FFD979]">🌙 while they sleep</Sticker>
-            <Sticker className="-right-28 top-40 rotate-[8deg] bg-[#B9E9D0]">📈 real stocks</Sticker>
-            <Sticker className="-left-24 bottom-24 rotate-[6deg] bg-[#FFB9A8]">🎁 from London</Sticker>
-            <Sticker className="-right-20 bottom-10 rotate-[-6deg] bg-white">🔐 Face ID</Sticker>
-            <Phone>
-              <div className="grid grid-cols-4 gap-3">
-                {["📷", "💬", "🎵", "🗺️", "📚", "🎮", "⚽", "🧮"].map((i) => (
-                  <span key={i} className="grid aspect-square place-items-center rounded-2xl bg-white text-xl shadow-sm">
-                    {i}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-4 rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-4 text-left text-white">
-                <p className="text-xs font-bold opacity-80">ALLOWANCE · this morning</p>
-                <p className="mt-1 text-lg font-extrabold leading-snug">🎁 Aunty Funmi sent you a slice of Apple</p>
-                <div className="mt-3 flex gap-2 text-xs font-bold">
-                  <span className="rounded-full bg-white/20 px-2 py-1">🌙 +$2.00</span>
-                  <span className="rounded-full bg-white/20 px-2 py-1">📈 +2.4%</span>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-3xl bg-[#DDF5E8] p-3 text-left">
-                  <p className="text-xs font-bold text-[#1F6B4A]">Savings</p>
-                  <p className="text-xl font-extrabold">$8.00</p>
-                </div>
-                <div className="rounded-3xl bg-[#FFF1C9] p-3 text-left">
-                  <p className="text-xs font-bold text-[#8A6A00]">🎯 Bike</p>
-                  <p className="text-xl font-extrabold">53%</p>
-                </div>
-              </div>
-            </Phone>
+          <div className="relative mx-auto mt-14 w-full max-w-4xl">
+            <Sticker className="sway left-2 top-6 rotate-[-8deg] bg-[#FFD979] md:-left-6">🌙 while they sleep</Sticker>
+            <Sticker className="sway right-2 top-24 rotate-[6deg] bg-[#B9E9D0] md:-right-6">📈 real stocks</Sticker>
+            <Sticker className="sway bottom-10 left-4 rotate-[5deg] bg-white md:-left-8">🔐 Face ID</Sticker>
+            <div className="float-slow rounded-[2.5rem] bg-white p-2 shadow-2xl">
+              <NightScene className="h-auto w-full" />
+            </div>
           </div>
         </section>
 
