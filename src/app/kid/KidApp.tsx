@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import VoiceRecorder from "@/components/VoiceRecorder";
 
 type Ticker = "AAPL" | "NVDA";
 type Profile = { id: string; nickname: string; avatar: string };
@@ -13,6 +14,15 @@ type KidState = {
   holdings: { usdcMicro: string; stocks: { ticker: Ticker; raw: string; shares: number }[] } | null;
   allowance: { amountMicro: string; periodSec: string; nextReleaseAt: number } | null;
   pitches: Pitch[];
+  report: Report;
+};
+type Report = {
+  gifts: { id: number; kind: string; gifterName: string | null; occasion: string | null; message: string | null; ticker: Ticker | null; usdcMicro: number; tokensRaw: string | null; txUrl: string; thanked: boolean }[];
+  approved: { id: number; ticker: Ticker; usdcMicro: number; matchPct: number; matchMicro: number; txUrl: string | null }[];
+  allowances: { usdcMicro: number; txUrl: string | null }[];
+  dividends: { ticker: Ticker }[];
+  scores: { pitchId: number; ticker: Ticker; changePct: number | null }[];
+  leaderboard: { nickname: string; avatar: string; me: boolean; pitchesMade: number; approvals: number; thankYous: number; points: number }[];
 };
 type Card = { whatItDoes: string; howItMakesMoney: string; oneThingToWatch: string; source?: string };
 type PitchInput = { ticker: Ticker; why: string; amount: number; coachQ?: string; coachA?: string };
@@ -34,7 +44,11 @@ const isBedtime = () => {
 async function kidApi<T>(body?: unknown): Promise<T> {
   const res = await fetch(
     "/api/kid",
-    body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+    body === undefined
+      ? { cache: "no-store" }
+      : body instanceof FormData
+        ? { method: "POST", body }
+        : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
   );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(json.error ?? "Something went wrong."), { status: res.status });
@@ -99,6 +113,16 @@ export default function KidApp() {
             panel={panel}
             busy={!!busy}
             onPitch={(p) => run(night ? "Sending your bedtime pitch…" : "Sending your pitch…", async () => setState(await kidApi<KidState>({ action: "pitch", ...p })))}
+            onThank={(giftId, text, voice) =>
+              run("Sending your thank-you…", async () => {
+                if (!voice) return setState(await kidApi<KidState>({ action: "thank-you", giftId, text }));
+                const form = new FormData();
+                form.set("giftId", String(giftId));
+                form.set("text", text);
+                form.set("voice", voice, "thank-you");
+                setState(await kidApi<KidState>(form));
+              })
+            }
             onLeave={() =>
               run("Switching back…", async () => {
                 await kidApi({ action: "leave" });
@@ -179,6 +203,7 @@ function KidHome({
   panel,
   busy,
   onPitch,
+  onThank,
   onLeave,
 }: {
   state: KidState;
@@ -186,6 +211,7 @@ function KidHome({
   panel: string;
   busy: boolean;
   onPitch: (p: PitchInput) => void;
+  onThank: (giftId: number, text: string, voice: Blob | null) => void;
   onLeave: () => void;
 }) {
   const { kid, holdings } = state;
@@ -198,8 +224,9 @@ function KidHome({
         <p className="text-5xl" aria-hidden>
           {kid.avatar}
         </p>
-        <h1 className="mt-1 text-2xl font-bold">{night ? `Good night, ${kid.nickname} 🌙` : `Hi ${kid.nickname} ☀️`}</h1>
+        <h1 className="mt-1 text-2xl font-bold">{night ? `Good night, ${kid.nickname} 🌙` : `Good morning, ${kid.nickname} ☀️`}</h1>
       </header>
+      {!night && <MorningReport state={state} busy={busy} onThank={onThank} />}
       <section className={`rounded-2xl p-4 ${panel}`}>
         <p className="text-sm opacity-80">My savings (read live from Base)</p>
         <p className="text-3xl font-bold">{state.hasVault ? usd(savings) : "…"}</p>
@@ -378,4 +405,205 @@ function PitchForm({
       )}
     </section>
   );
+}
+
+function MorningReport({ state, busy, onThank }: { state: KidState; busy: boolean; onThank: (giftId: number, text: string, voice: Blob | null) => void }) {
+  const r = state.report;
+  const [texts, setTexts] = useState<Record<number, string>>({});
+  const [voices, setVoices] = useState<Record<number, Blob | null>>({});
+  const [saved, setSaved] = useState<string | null>(null);
+  const scoreOf = (id: number) => r.scores.find((s) => s.pitchId === id)?.changePct ?? null;
+  const empty = !r.gifts.length && !r.approved.length && !r.allowances.length && !r.dividends.length;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="rounded-2xl bg-gradient-to-b from-sunrise-300 to-sunrise-100 p-5 text-ink">
+        <h2 className="text-2xl font-bold">Your Morning Report</h2>
+        <p className="text-sm">What arrived in the last 24 hours, straight from Base.</p>
+      </div>
+      {empty && <p className="rounded-2xl bg-white p-4">A quiet night. Check back tomorrow morning!</p>}
+      {r.gifts.map((g) => (
+        <article key={g.id} className="rounded-2xl bg-white p-4 text-ink">
+          <p className="text-lg font-semibold">
+            🎁{" "}
+            {g.kind === "group_settled"
+              ? `Your family chipped in together for ${usd(g.usdcMicro)} of ${g.ticker ? COMPANIES[g.ticker].name : "shares"}!`
+              : `${g.gifterName ?? "Someone in your family"} sent you a slice of ${g.ticker ? COMPANIES[g.ticker].name : "a company"} while you slept.`}
+          </p>
+          {(g.occasion || g.message) && (
+            <p className="text-sm opacity-80">
+              {g.occasion}
+              {g.message ? `: “${g.message}”` : ""}
+            </p>
+          )}
+          <a href={g.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+            See it on Basescan ↗
+          </a>
+          {g.thanked ? (
+            <p className="mt-2 text-sm">💌 Thank-you sent. They&apos;ll see it when they open their gift link.</p>
+          ) : (
+            <form
+              className="mt-3 flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onThank(g.id, texts[g.id] ?? "", voices[g.id] ?? null);
+              }}
+            >
+              <label htmlFor={`ty-${g.id}`} className="text-sm font-semibold">
+                Say thank you
+              </label>
+              <input
+                id={`ty-${g.id}`}
+                maxLength={280}
+                value={texts[g.id] ?? ""}
+                placeholder="Thank you so much! 🧡"
+                onChange={(e) => setTexts((t) => ({ ...t, [g.id]: e.target.value }))}
+                className="rounded-xl border border-sunrise-300 p-3"
+              />
+              <VoiceRecorder onChange={(b) => setVoices((v) => ({ ...v, [g.id]: b }))} />
+              <button
+                type="submit"
+                disabled={busy || (!(texts[g.id] ?? "").trim() && !voices[g.id])}
+                className="rounded-xl bg-sunrise-500 px-4 py-3 font-semibold text-white disabled:opacity-60"
+              >
+                💌 Send thank-you
+              </button>
+            </form>
+          )}
+        </article>
+      ))}
+      {r.approved.map((p) => {
+        const change = scoreOf(p.id);
+        return (
+          <article key={p.id} className="rounded-2xl bg-white p-4 text-ink">
+            <p className="text-lg font-semibold">✅ Your {COMPANIES[p.ticker].name} pitch was approved! You own a piece of it.</p>
+            {p.matchPct > 0 && (
+              <p className="text-sm font-semibold text-sunrise-700">
+                💛 Matched {p.matchPct}%: +{usd(p.matchMicro)} on top of your {usd(p.usdcMicro)}.
+              </p>
+            )}
+            {change !== null && (
+              <p className="text-sm">
+                📈 Since you picked it: {Math.abs(change) < 0.05 ? "about the same" : `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(2)}%`}.{" "}
+                <span className="opacity-70">(Live price on Base. Prices go up and down.)</span>
+              </p>
+            )}
+            {p.txUrl && (
+              <a href={p.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+                See it on Basescan ↗
+              </a>
+            )}
+          </article>
+        );
+      })}
+      {r.allowances.map((a, i) => (
+        <article key={i} className="rounded-2xl bg-white p-4 text-ink">
+          <p className="text-lg font-semibold">🌙 Your allowance landed at midnight: {usd(a.usdcMicro)}</p>
+          {a.txUrl && (
+            <a href={a.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+              See it on Basescan ↗
+            </a>
+          )}
+        </article>
+      ))}
+      {r.dividends.map((d) => (
+        <article key={d.ticker} className="rounded-2xl bg-white p-4 text-ink">
+          <p className="text-lg font-semibold">💸 {COMPANIES[d.ticker].name} paid you overnight! Your shares grew.</p>
+        </article>
+      ))}
+      {r.leaderboard.length > 1 && (
+        <section className="rounded-2xl bg-white p-4 text-ink" aria-labelledby="lb">
+          <h3 id="lb" className="font-semibold">
+            🏆 Family leaderboard
+          </h3>
+          <p className="text-xs opacity-70">Points for pitches (1), approvals (2) and thank-yous (1). Never for money made.</p>
+          <ol className="mt-2 flex flex-col gap-1">
+            {r.leaderboard.map((l, i) => (
+              <li key={l.nickname} className={`flex justify-between rounded-lg px-2 py-1 ${l.me ? "bg-sunrise-100 font-semibold" : ""}`}>
+                <span>
+                  {i + 1}. {l.avatar} {l.nickname}
+                </span>
+                <span className="text-sm">{l.points} pts</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {!empty && (
+        <button
+          type="button"
+          onClick={() =>
+            saveCard(state)
+              .then(setSaved)
+              .catch(() => setSaved("Couldn't make the image on this device."))
+          }
+          className="rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon"
+        >
+          📸 Save my Morning Report as an image
+        </button>
+      )}
+      {saved && <p className="text-center text-sm">{saved}</p>}
+    </section>
+  );
+}
+
+/** Draws the Morning Report as a 1080x1350 picture to share with family (share sheet on phones, download elsewhere). */
+async function saveCard(state: KidState): Promise<string> {
+  const W = 1080;
+  const H = 1350;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "#ffbf80");
+  grad.addColorStop(1, "#fff8ef");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  const font = getComputedStyle(document.body).fontFamily || "sans-serif";
+  let y = 150;
+  const line = (text: string, size: number, weight = 600, color = "#2a1a10") => {
+    g.fillStyle = color;
+    g.font = `${weight} ${size}px ${font}`;
+    let cur = "";
+    for (const w of text.split(" ")) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (g.measureText(next).width > W - 160 && cur) {
+        g.fillText(cur, 80, y);
+        cur = w;
+        y += size * 1.3;
+      } else cur = next;
+    }
+    if (cur) g.fillText(cur, 80, y);
+    y += size * 1.6;
+  };
+  const r = state.report;
+  line(`☀️ GOOD MORNING, ${state.kid.nickname.toUpperCase()}`, 40, 700, "#b4461a");
+  line("My Morning Report", 84, 800);
+  for (const gift of r.gifts)
+    line(`🎁 ${gift.kind === "group_settled" ? "My family chipped in for" : `${gift.gifterName ?? "Family"} sent me`} a slice of ${gift.ticker ? COMPANIES[gift.ticker].name : "a company"}.`, 46);
+  for (const p of r.approved) line(`✅ My ${COMPANIES[p.ticker].name} pitch was approved${p.matchPct ? ` and matched ${p.matchPct}%` : ""}.`, 46);
+  if (r.allowances.length) line("🌙 My allowance landed at midnight.", 46);
+  for (const d of r.dividends) line(`💸 ${COMPANIES[d.ticker].name} paid me a dividend overnight!`, 46);
+  g.font = `600 34px ${font}`;
+  g.fillStyle = "#2a1a10";
+  g.fillText("Allowance · the family money app that works the night shift", 80, H - 120);
+  g.font = `400 28px ${font}`;
+  g.fillText("Real tokenized stocks on Base. Learning only, not financial advice.", 80, H - 70);
+  const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("no image"))), "image/png"));
+  const file = new File([blob], "morning-report.png", { type: "image/png" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "My Morning Report" });
+      return "Shared! 💌";
+    } catch {
+      // Share sheet closed: fall back to a download.
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return "Saved to your downloads. Send it to Grandma on WhatsApp!";
 }

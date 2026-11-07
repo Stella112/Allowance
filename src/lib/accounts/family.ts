@@ -9,6 +9,7 @@ import { AccountError } from "./errors";
 import { giftLinksOf } from "./gifts";
 import { getKid, listKids, type Kid } from "./kids";
 import { verifyApproval } from "./passkeys";
+import { morningReport } from "./report";
 import type { Parent } from "./parents";
 
 const addr = (s: string) => s as `0x${string}`;
@@ -103,12 +104,14 @@ export async function kidState(kid: Kid) {
     kidChainState(vault, kid),
     db().from("pitches").select().eq("kid_id", kid.id).order("created_at", { ascending: false }).limit(20),
   ]);
+  const report = await morningReport(kid, holdings);
   return {
     kid: { id: kid.id, nickname: kid.nickname, avatar: kid.avatar, birth_year: kid.birth_year, max_per_pitch_micro: kid.max_per_pitch_micro },
     hasVault: !!vault,
     holdings,
     allowance,
     pitches: ((pitches ?? []) as Pitch[]).map(withTx),
+    report,
   };
 }
 

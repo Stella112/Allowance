@@ -16,7 +16,7 @@ type LinkInfo = {
   occasions: string[];
   maxGiftMicro: number;
   gifts: { id: number; kind: string; gifter_name: string | null; occasion: string | null; ticker: Ticker | null; usdc_micro: number; txUrl: string; created_at: string }[];
-  thanks: { gift_id: number; message: string | null; created_at: string }[];
+  thanks: { gift_id: number; message: string | null; created_at: string; voiceUrl: string | null }[];
 };
 
 const COMPANIES: Record<Ticker, { name: string; emoji: string }> = { AAPL: { name: "Apple", emoji: "🍎" }, NVDA: { name: "Nvidia", emoji: "🎮" } };
@@ -214,7 +214,15 @@ export default function GiftApp({ code }: { code: string }) {
       {info.thanks.length > 0 && (
         <section className="flex flex-col gap-2 rounded-2xl bg-sunrise-100 p-4 text-ink">
           {info.thanks.map((t, i) => (
-            <p key={i}>💌 {kidName} says: “{t.message}”</p>
+            <div key={i} className="flex flex-col gap-1">
+              {t.message && <p>💌 {kidName} says: “{t.message}”</p>}
+              {t.voiceUrl && (
+                <>
+                  <p className="text-sm font-semibold">🎙️ {kidName} sent you a voice note</p>
+                  <audio controls src={t.voiceUrl} className="h-10 max-w-full" />
+                </>
+              )}
+            </div>
           ))}
         </section>
       )}

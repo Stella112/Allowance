@@ -4,6 +4,7 @@ import { allowanceSchedule, groupGift, releaseAllowance, settleGroupGiftTx, vaul
 import { db } from "../db";
 import { isTicker } from "../stocks";
 import { KID_COLUMNS, type Kid } from "./kids";
+import { recordDividends } from "./report";
 
 const MAX_ACTIONS_PER_RUN = 20; // each is one on-chain transaction from the operator
 const LOCK_MINUTES = 30;
@@ -22,6 +23,12 @@ export async function runNightShift(now = new Date()): Promise<{ results: Result
   if (running?.length) return { results: [], skipped: "Another night shift is running." };
 
   const results: Result[] = [];
+  // Real dividends only: compare each stock token's multiplier with what we saw last night.
+  try {
+    for (const t of await recordDividends()) results.push({ action: `dividend:${t}`, ok: true });
+  } catch (err) {
+    results.push({ action: "dividends", ok: false, note: String(err).slice(0, 120) });
+  }
   const { data: parents } = await db().from("parents").select("id, vault").not("vault", "is", null);
 
   for (const p of parents ?? []) {

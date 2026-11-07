@@ -5,6 +5,7 @@ import { contributionOf, groupGift, openGroupGiftTx, quoteMinOut, readGiftTx } f
 import { config, txUrl } from "../config";
 import { db } from "../db";
 import { STOCKS, isTicker, type Ticker } from "../stocks";
+import { signedVoiceUrls } from "../voice";
 import { AccountError } from "./errors";
 import { getKid, kidOfParent } from "./kids";
 import type { Parent } from "./parents";
@@ -82,8 +83,9 @@ export async function publicGiftLink(code: string, who?: string | null) {
     .limit(20);
   const giftIds = (gifts ?? []).map((g) => g.id);
   const { data: thanks } = giftIds.length
-    ? await db().from("thank_yous").select("gift_id, message, created_at").in("gift_id", giftIds)
+    ? await db().from("thank_yous").select("gift_id, message, voice_path, created_at").in("gift_id", giftIds)
     : { data: [] };
+  const voices = await signedVoiceUrls((thanks ?? []).flatMap((t) => (t.voice_path ? [t.voice_path as string] : []))).catch(() => new Map<string, string>());
   return {
     kid: { nickname: kid.nickname, avatar: kid.avatar, chainKidId: kid.chain_kid_id, timezone, graduated: !!kid.graduated_to },
     vault,
@@ -103,7 +105,7 @@ export async function publicGiftLink(code: string, who?: string | null) {
     occasions: OCCASIONS,
     maxGiftMicro: MAX_GIFT_MICRO,
     gifts: (gifts ?? []).map((g) => ({ ...g, txUrl: txUrl(g.tx_hash) })),
-    thanks: thanks ?? [],
+    thanks: (thanks ?? []).map((t) => ({ gift_id: t.gift_id, message: t.message, created_at: t.created_at, voiceUrl: t.voice_path ? voices.get(t.voice_path) ?? null : null })),
   };
 }
 

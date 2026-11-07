@@ -1,5 +1,6 @@
 import { AccountError, toResponse } from "@/lib/accounts/errors";
 import { createPitch, kidState } from "@/lib/accounts/family";
+import { sendThankYou } from "@/lib/accounts/report";
 import { checkPin, getKid, listKids } from "@/lib/accounts/kids";
 import { currentAppSession, endSession, startSession } from "@/lib/accounts/session";
 
@@ -27,6 +28,14 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    // Voice thank-yous arrive as multipart form data; everything else is JSON.
+    if (req.headers.get("content-type")?.startsWith("multipart/form-data")) {
+      const kid = await requireKid();
+      const form = await req.formData();
+      const voice = form.get("voice");
+      await sendThankYou(kid, form.get("giftId"), form.get("text") ?? "", voice instanceof Blob && voice.size > 0 ? voice : undefined);
+      return Response.json(await kidState(kid));
+    }
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     switch (body.action) {
       case "switch": {
@@ -43,6 +52,11 @@ export async function POST(req: Request) {
       case "pitch": {
         const kid = await requireKid();
         await createPitch(kid, { ticker: body.ticker, why: body.why, amount: body.amount, coachQ: body.coachQ, coachA: body.coachA });
+        return Response.json(await kidState(kid));
+      }
+      case "thank-you": {
+        const kid = await requireKid();
+        await sendThankYou(kid, body.giftId, body.text);
         return Response.json(await kidState(kid));
       }
       case "leave":
