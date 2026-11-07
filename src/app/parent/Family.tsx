@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useSendUserOperation } from "@coinbase/cdp-hooks";
 import { startAuthentication } from "@simplewebauthn/browser";
 import Link from "next/link";
@@ -205,7 +206,8 @@ export default function Family() {
       ) : (
         <>
 
-          <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE7FF] bg-white/90 backdrop-blur">
+          {createPortal(
+<nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE7FF] bg-white/90 backdrop-blur">
             <div className="mx-auto grid max-w-xl grid-cols-4">
               {(
                 [
@@ -230,7 +232,8 @@ export default function Family() {
                 </button>
               ))}
             </div>
-          </nav>
+          </nav>,
+ document.body)}
           {tab === "home" && (
             <>
           <Pool state={state} busy={!!busy} onDeposit={(micro) =>
@@ -718,8 +721,9 @@ function GiftLinks({
     <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
       <h2 className="text-lg font-semibold">✈️ Gift links for family abroad</h2>
       <p className="text-sm text-moon-dim">
-        Share a link on WhatsApp. Relatives open it, pick a company and pay in USDC from their own wallet. No Allowance account needed. Group links let several
-        relatives chip in toward one target.
+        Share a link on WhatsApp. <strong>The relative chooses the company, the amount (up to $5), the occasion and a message</strong> when they open it, then pays in
+        USDC from their own wallet. No Allowance account needed. For a <strong>group gift</strong>, you pick the company and the target amount here, and
+        several relatives chip in.
       </p>
       <div className="flex flex-wrap gap-2">
         <select aria-label="For which child" value={kidId} onChange={(e) => setKidId(e.target.value)} className="rounded-lg bg-white p-2 text-ink">

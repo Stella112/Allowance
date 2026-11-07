@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -446,7 +447,8 @@ function KidHome({
       <span className="hidden">{panel}</span>
 
       {/* Bottom tab bar */}
-      <nav aria-label="Kid sections" className="fixed inset-x-0 bottom-0 z-40 p-3">
+      {createPortal(
+<nav aria-label="Kid sections" className="fixed inset-x-0 bottom-0 z-40 p-3">
         <div className="mx-auto grid max-w-xl grid-cols-4 rounded-3xl border-2 border-ink bg-white p-1.5 text-ink shadow-[0_4px_0_0_#25243A]">
           {(
             [
@@ -468,7 +470,8 @@ function KidHome({
             </button>
           ))}
         </div>
-      </nav>
+      </nav>,
+ document.body)}
     </div>
   );
 }
