@@ -357,10 +357,19 @@ function Inbox({
 function Pool({ state, busy, onDeposit }: { state: FamilyState; busy: boolean; onDeposit: (micro: bigint) => void }) {
   const [amount, setAmount] = useState("1");
   return (
-    <section className="flex flex-col gap-2 rounded-2xl bg-night-900 p-5">
-      <h2 className="text-lg font-semibold">🏦 Family pool</h2>
-      <p className="text-3xl font-bold">{usd(state.familyUsdcMicro)}</p>
-      <p className="text-sm text-moon-dim">Pays allowances and your matches. Read live from your vault on Base.</p>
+    <section className="flex flex-col gap-3 rounded-3xl bg-white p-5">
+      <div className="rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white">
+        <p className="text-sm opacity-80">🏦 Family pool</p>
+        <p className="mt-1 text-4xl font-extrabold">{usd(state.familyUsdcMicro)}</p>
+        <p className="mt-1 text-xs opacity-80">Pays allowances and your matches · live from your vault on Base</p>
+        <div className="mt-4 flex -space-x-2">
+          {state.kids.map((k) => (
+            <span key={k.id} title={k.nickname} className="grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-[#FFE6DD] text-xl">
+              {k.avatar}
+            </span>
+          ))}
+        </div>
+      </div>
       <p className="break-all text-xs text-moon-dim">
         Vault:{" "}
         <a className="underline" href={`https://basescan.org/address/${state.parent.vault}`} target="_blank" rel="noreferrer">
@@ -427,19 +436,29 @@ function KidCard({
   return (
     <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          {kid.avatar} {kid.nickname}, {age}
+        <h2 className="flex items-center gap-3 text-xl font-extrabold">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#FFE6DD] text-2xl">{kid.avatar}</span>
+          <span>
+            {kid.nickname}
+            <span className="block text-sm font-semibold text-moon-dim">Age {age}</span>
+          </span>
         </h2>
         {kid.paused && <span className="rounded-full bg-red-200 px-2 py-1 text-xs text-red-900">Paused</span>}
       </div>
-      <p>
-        Savings: <span className="font-semibold">{usd(kid.holdings?.usdcMicro)}</span>
-        {owned.map((s) => (
-          <span key={s.ticker} className="ml-2">
-            · {COMPANY[s.ticker]} {s.shares.toFixed(7).replace(/0+$/, "")}
-          </span>
-        ))}
-      </p>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-2xl bg-[#DDF5E8] p-3">
+          <p className="text-xs font-semibold text-[#1F6B4A]">💚 Savings</p>
+          <p className="text-lg font-extrabold">{usd(kid.holdings?.usdcMicro)}</p>
+        </div>
+        <div className="rounded-2xl bg-[#EDE7FF] p-3">
+          <p className="text-xs font-semibold text-star">📈 Shares</p>
+          <p className="text-sm font-bold">{owned.length ? owned.map((s) => COMPANY[s.ticker].split(" ")[0]).join(" ") : "None yet"}</p>
+        </div>
+        <div className="rounded-2xl bg-[#FFF1C9] p-3">
+          <p className="text-xs font-semibold text-[#8A6A00]">🌙 Allowance</p>
+          <p className="text-sm font-bold">{onChain ? `${usd(kid.allowance!.amountMicro)}/${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "mo" : "wk"}` : "Not set"}</p>
+        </div>
+      </div>
 
       <fieldset className="flex flex-col gap-2 rounded-xl bg-night-800 p-3">
         <legend className="px-1 text-sm font-semibold">Allowance (lands at midnight)</legend>

@@ -147,8 +147,8 @@ button[aria-pressed="true"] {
 }
 
 /* Big emoji and avatars wiggle and bob a little */
-.text-5xl,
-.text-4xl {
+.text-5xl[aria-hidden],
+.text-4xl[aria-hidden] {
   display: inline-block;
   animation: bob 3.2s ease-in-out infinite;
   transform-origin: 50% 80%;

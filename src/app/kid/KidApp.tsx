@@ -227,17 +227,42 @@ function KidHome({
         <h1 className="mt-1 text-2xl font-bold">{night ? `Good night, ${kid.nickname} 🌙` : `Good morning, ${kid.nickname} ☀️`}</h1>
       </header>
       {!night && <MorningReport state={state} busy={busy} onThank={onThank} />}
-      <section className={`rounded-2xl p-4 ${panel}`}>
-        <p className="text-sm opacity-80">My savings (read live from Base)</p>
-        <p className="text-3xl font-bold">{state.hasVault ? usd(savings) : "…"}</p>
-        {owned.map((s) => (
-          <p key={s.ticker}>
-            {COMPANIES[s.ticker].emoji} I own {s.shares.toFixed(7).replace(/0+$/, "")} shares of {COMPANIES[s.ticker].name}
+      <section className="rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white">
+        <p className="text-sm opacity-80">💰 My savings · live from Base</p>
+        <p className="mt-1 text-4xl font-extrabold">{state.hasVault ? usd(savings) : "…"}</p>
+        <p className="mt-1 text-xs opacity-80">Only your parent can move money. You can ask!</p>
+      </section>
+      <section className="grid grid-cols-2 gap-3">
+        <div className="rounded-3xl bg-[#DDF5E8] p-4 text-ink">
+          <p className="text-xs font-bold text-[#1F6B4A]">📈 Companies I own</p>
+          {owned.length ? (
+            owned.map((s) => (
+              <p key={s.ticker} className="mt-1 font-bold">
+                {COMPANIES[s.ticker].emoji} {COMPANIES[s.ticker].name}
+                <span className="block text-xs font-semibold opacity-70">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
+              </p>
+            ))
+          ) : (
+            <p className="mt-1 text-sm">None yet. Pitch one below!</p>
+          )}
+        </div>
+        <div className="rounded-3xl bg-[#FFF1C9] p-4 text-ink">
+          <p className="text-xs font-bold text-[#8A6A00]">🌙 Allowance</p>
+          <p className="mt-1 text-xl font-extrabold">
+            {state.allowance && state.allowance.amountMicro !== "0" ? usd(state.allowance.amountMicro) : "Not set"}
           </p>
-        ))}
-        {state.allowance && state.allowance.amountMicro !== "0" && (
-          <p className="mt-1 text-sm opacity-80">🌙 Next allowance: {usd(state.allowance.amountMicro)}, while you sleep.</p>
-        )}
+          <p className="text-xs opacity-70">lands while you sleep</p>
+        </div>
+        <div className="rounded-3xl bg-[#FFE6DD] p-4 text-ink">
+          <p className="text-xs font-bold text-sunrise-700">🚀 Pitches</p>
+          <p className="mt-1 text-xl font-extrabold">{state.pitches.length}</p>
+          <p className="text-xs opacity-70">{state.pitches.filter((p) => p.status === "confirmed").length} approved</p>
+        </div>
+        <div className="rounded-3xl bg-[#EDE7FF] p-4 text-ink">
+          <p className="text-xs font-bold text-star">🏆 Points</p>
+          <p className="mt-1 text-xl font-extrabold">{state.report.leaderboard.find((l) => l.me)?.points ?? 0}</p>
+          <p className="text-xs opacity-70">for learning, not money</p>
+        </div>
       </section>
       <PitchForm
         kidName={kid.nickname}
