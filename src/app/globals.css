@@ -328,3 +328,20 @@ textarea:focus {
 .night-scene .ns-wave { transform-box: fill-box; transform-origin: 0% 100%; }
 .night-scene .ns-breathe,
 .night-scene .ns-fill { transform-box: fill-box; transform-origin: 50% 100%; }
+
+/* Kids' illustrations */
+.piggy .coin-drop { animation: coin-drop 2.6s ease-in infinite; }
+@keyframes coin-drop {
+  0% { transform: translateY(-14px); opacity: 0; }
+  20% { opacity: 1; }
+  60% { transform: translateY(16px); opacity: 1; }
+  70%, 100% { transform: translateY(16px); opacity: 0; }
+}
+.piggy { animation: ns-float 4s ease-in-out infinite; }
+.rocket .rocket-fly { animation: rocket-fly 2.8s ease-in-out infinite; }
+@keyframes rocket-fly {
+  0%, 100% { transform: translate(0, 4px) rotate(8deg); }
+  50% { transform: translate(0, -8px) rotate(8deg); }
+}
+.rocket .flame { transform-box: fill-box; transform-origin: 50% 0%; animation: flame 0.35s ease-in-out infinite alternate; }
+@keyframes flame { from { transform: scaleY(0.8); } to { transform: scaleY(1.25); } }

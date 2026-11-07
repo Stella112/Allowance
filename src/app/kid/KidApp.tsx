@@ -85,15 +85,18 @@ export default function KidApp() {
     }
   };
 
-  const theme = night ? "bg-night-950 text-moon" : "bg-sunrise-50 text-ink";
+  // Lavender by day; deep violet at bedtime (the night shift).
+  const theme = night ? "bg-[#2B2463] text-white" : "bg-[#EEE9FF] text-ink";
   const panel = night ? "bg-night-900" : "bg-white";
 
   return (
     <div className={`min-h-full flex-1 ${theme}`}>
       <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-6">
-        <Link href="/parent" className="text-sm font-semibold">
-          ← Grown-ups
-        </Link>
+        {!state && (
+          <Link href="/parent" className="text-sm font-semibold">
+            ← Grown-ups
+          </Link>
+        )}
         {error && (
           <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
             {error}
@@ -197,6 +200,76 @@ function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; pa
   );
 }
 
+/* Outlined, chunky cards in the style of the kids' finance references. */
+const CARD = "rounded-3xl border-2 border-ink bg-white p-4 text-ink shadow-[0_4px_0_0_#25243A]";
+
+function Piggy({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 120 100" className={`piggy ${className}`} aria-hidden>
+      <ellipse cx="60" cy="92" rx="38" ry="5" fill="#25243A" opacity="0.12" />
+      <ellipse cx="58" cy="56" rx="42" ry="32" fill="#FFB9A8" stroke="#25243A" strokeWidth="3" />
+      <circle cx="96" cy="54" r="12" fill="#FF8F73" stroke="#25243A" strokeWidth="3" />
+      <circle cx="93" cy="52" r="2" fill="#25243A" />
+      <circle cx="99" cy="52" r="2" fill="#25243A" />
+      <circle cx="76" cy="42" r="3.5" fill="#25243A" />
+      <path d="M38 28 l-4 -14 l14 8 z" fill="#FF8F73" stroke="#25243A" strokeWidth="3" strokeLinejoin="round" />
+      <rect x="44" y="22" width="22" height="5" rx="2.5" fill="#25243A" />
+      <path d="M32 82 v8 M52 86 v6 M70 86 v6 M86 80 v8" stroke="#25243A" strokeWidth="6" strokeLinecap="round" />
+      <path d="M16 52 q-10 -4 -6 -12" stroke="#25243A" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <g className="coin-drop">
+        <circle cx="55" cy="6" r="9" fill="#FFD979" stroke="#25243A" strokeWidth="3" />
+      </g>
+    </svg>
+  );
+}
+
+function Rocket({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 120 120" className={`rocket ${className}`} aria-hidden>
+      <g className="rocket-fly">
+        <path d="M60 10 c22 16 26 46 16 70 h-32 c-10 -24 -6 -54 16 -70 z" fill="#ffffff" stroke="#25243A" strokeWidth="3" />
+        <path d="M60 10 c8 6 13 13 16 22 h-32 c3 -9 8 -16 16 -22 z" fill="#FFD979" stroke="#25243A" strokeWidth="3" />
+        <circle cx="60" cy="48" r="9" fill="#B9E9D0" stroke="#25243A" strokeWidth="3" />
+        <path d="M44 64 l-14 18 l16 -2 z M76 64 l14 18 l-16 -2 z" fill="#7656E8" stroke="#25243A" strokeWidth="3" strokeLinejoin="round" />
+        <g className="flame">
+          <path d="M50 82 q10 26 20 0 z" fill="#FF8F73" stroke="#25243A" strokeWidth="3" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+type Goal = { name: string; emoji: string; targetMicro: number };
+const GOAL_IDEAS = [
+  { name: "New bike", emoji: "🚲" },
+  { name: "Football boots", emoji: "⚽" },
+  { name: "Headphones", emoji: "🎧" },
+  { name: "Art set", emoji: "🎨" },
+];
+
+/** A savings goal lives on this device only (it's for motivation; the money itself is on Base). */
+function useGoal(kidId: string) {
+  const key = `allowance:goal:${kidId}`;
+  const [goal, setGoalState] = useState<Goal | null>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as Goal) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setGoal = (g: Goal | null) => {
+    setGoalState(g);
+    try {
+      if (g) localStorage.setItem(key, JSON.stringify(g));
+      else localStorage.removeItem(key);
+    } catch {
+      // Storage blocked: the goal just lasts for this visit.
+    }
+  };
+  return [goal, setGoal] as const;
+}
+
 function KidHome({
   state,
   night,
@@ -218,83 +291,221 @@ function KidHome({
   const band = bandFor(kid.birth_year);
   const owned = holdings?.stocks.filter((s) => s.raw !== "0") ?? [];
   const savings = Number(holdings?.usdcMicro ?? 0);
+  const [tab, setTab] = useState<"home" | "invest" | "goals" | "report">("home");
+  const [goal, setGoal] = useGoal(kid.id);
+  const goalPct = goal ? Math.min(100, Math.round((savings / goal.targetMicro) * 100)) : 0;
+  const newThings = state.report.gifts.length + state.report.approved.length + state.report.allowances.length;
+  const go = (t: typeof tab) => {
+    setTab(t);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <>
-      <header>
-        <p className="text-5xl" aria-hidden>
-          {kid.avatar}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold">{night ? `Good night, ${kid.nickname} 🌙` : `Good morning, ${kid.nickname} ☀️`}</h1>
-      </header>
-      {!night && <MorningReport state={state} busy={busy} onThank={onThank} />}
-      <section className="rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white">
-        <p className="text-sm opacity-80">💰 My savings · live from Base</p>
-        <p className="mt-1 text-4xl font-extrabold">{state.hasVault ? usd(savings) : "…"}</p>
-        <p className="mt-1 text-xs opacity-80">Only your parent can move money. You can ask!</p>
-      </section>
-      <section className="grid grid-cols-2 gap-3">
-        <div className="rounded-3xl bg-[#DDF5E8] p-4 text-ink">
-          <p className="text-xs font-bold text-[#1F6B4A]">📈 Companies I own</p>
-          {owned.length ? (
-            owned.map((s) => (
-              <p key={s.ticker} className="mt-1 font-bold">
-                {COMPANIES[s.ticker].emoji} {COMPANIES[s.ticker].name}
-                <span className="block text-xs font-semibold opacity-70">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
-              </p>
-            ))
-          ) : (
-            <p className="mt-1 text-sm">None yet. Pitch one below!</p>
+    <div className="flex flex-col gap-4 pb-28">
+      {/* Header */}
+      <header className="flex items-center gap-3">
+        <span className="grid h-14 w-14 place-items-center rounded-full border-2 border-ink bg-[#FFE6DD] text-3xl">{kid.avatar}</span>
+        <div className="flex-1">
+          <p className="text-sm font-semibold opacity-70">{night ? "Good night 🌙" : "Hello ☀️"}</p>
+          <h1 className="text-2xl font-black">{kid.nickname}</h1>
+        </div>
+        <button type="button" onClick={() => go("report")} aria-label={`Morning Report, ${newThings} new`} className="relative grid h-12 w-12 place-items-center rounded-full border-2 border-ink bg-white text-xl">
+          🔔
+          {newThings > 0 && (
+            <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-star px-1 text-xs font-black text-white">{newThings}</span>
           )}
-        </div>
-        <div className="rounded-3xl bg-[#FFF1C9] p-4 text-ink">
-          <p className="text-xs font-bold text-[#8A6A00]">🌙 Allowance</p>
-          <p className="mt-1 text-xl font-extrabold">
-            {state.allowance && state.allowance.amountMicro !== "0" ? usd(state.allowance.amountMicro) : "Not set"}
-          </p>
-          <p className="text-xs opacity-70">lands while you sleep</p>
-        </div>
-        <div className="rounded-3xl bg-[#FFE6DD] p-4 text-ink">
-          <p className="text-xs font-bold text-sunrise-700">🚀 Pitches</p>
-          <p className="mt-1 text-xl font-extrabold">{state.pitches.length}</p>
-          <p className="text-xs opacity-70">{state.pitches.filter((p) => p.status === "confirmed").length} approved</p>
-        </div>
-        <div className="rounded-3xl bg-[#EDE7FF] p-4 text-ink">
-          <p className="text-xs font-bold text-star">🏆 Points</p>
-          <p className="mt-1 text-xl font-extrabold">{state.report.leaderboard.find((l) => l.me)?.points ?? 0}</p>
-          <p className="text-xs opacity-70">for learning, not money</p>
-        </div>
-      </section>
-      <PitchForm
-        kidName={kid.nickname}
-        band={band}
-        night={night}
-        panel={panel}
-        busy={busy}
-        maxMicro={Math.min(kid.max_per_pitch_micro, savings)}
-        onPitch={onPitch}
-      />
-      {state.pitches.length > 0 && (
-        <section className={`flex flex-col gap-2 rounded-2xl p-4 ${panel}`}>
-          <h2 className="font-semibold">My pitches</h2>
-          {state.pitches.map((p) => (
-            <article key={p.id} className="text-sm">
-              <p>
-                {COMPANIES[p.ticker].emoji} {usd(p.usdc_micro)} of {COMPANIES[p.ticker].name}: {pitchStatus(p, night)}
+        </button>
+      </header>
+
+      {tab === "home" && (
+        <>
+          <section className={`${CARD} flex items-center gap-3`}>
+            <div className="flex-1">
+              <p className="text-sm font-bold opacity-70">Total savings</p>
+              <p className="text-4xl font-black tracking-tight">{state.hasVault ? usd(savings) : "…"}</p>
+              <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[#1F6B4A]">● live from Base</p>
+            </div>
+            <Piggy className="h-24 w-28" />
+          </section>
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={() => go("invest")} className={`${CARD} flex items-center gap-2 bg-[#FFE6DD] py-3 font-black`}>
+              <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">🚀</span> Pitch
+            </button>
+            <button type="button" onClick={() => go("report")} className={`${CARD} flex items-center gap-2 bg-[#EDE7FF] py-3 font-black`}>
+              <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">☀️</span> Report
+            </button>
+          </div>
+          <button type="button" onClick={() => go("goals")} className={`${CARD} flex items-center gap-3 bg-[#E6F59A] text-left`}>
+            <div className="flex-1">
+              <p className="flex items-center gap-2 text-sm font-black">
+                <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">🎯</span> Goal progress
               </p>
-              {p.txUrl && (
-                <a href={p.txUrl} target="_blank" rel="noreferrer" className="underline">
-                  See it on Basescan ↗
-                </a>
-              )}
-            </article>
-          ))}
-        </section>
+              <p className="mt-2 text-5xl font-black">{goal ? `${goalPct}%` : "Set one!"}</p>
+              {goal && <p className="text-sm font-bold">{goal.emoji} {goal.name}</p>}
+            </div>
+            <Rocket className="h-28 w-24" />
+          </button>
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black">Companies I own</h2>
+              <button type="button" onClick={() => go("invest")} className="text-sm font-bold underline">
+                Pitch one
+              </button>
+            </div>
+            {owned.length ? (
+              owned.map((s) => (
+                <div key={s.ticker} className={`${CARD} flex items-center gap-3 py-3`}>
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-ink bg-[#DDF5E8] text-xl">{COMPANIES[s.ticker].emoji}</span>
+                  <span className="flex-1 font-black">{COMPANIES[s.ticker].name}</span>
+                  <span className="text-sm font-bold">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
+                </div>
+              ))
+            ) : (
+              <p className={`${CARD} py-3 text-sm font-semibold`}>None yet. Pitch a company and ask your parent!</p>
+            )}
+            <div className={`${CARD} flex items-center gap-3 bg-[#FFF1C9] py-3`}>
+              <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-ink bg-white text-xl">🌙</span>
+              <span className="flex-1 font-black">Allowance</span>
+              <span className="text-sm font-bold">
+                {state.allowance && state.allowance.amountMicro !== "0" ? `${usd(state.allowance.amountMicro)} while you sleep` : "Not set yet"}
+              </span>
+            </div>
+          </section>
+        </>
       )}
-      <button type="button" onClick={onLeave} className="self-start text-sm underline">
+
+      {tab === "invest" && (
+        <>
+          <PitchForm kidName={kid.nickname} band={band} night={false} panel={CARD} busy={busy} maxMicro={Math.min(kid.max_per_pitch_micro, savings)} onPitch={onPitch} />
+          {state.pitches.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-lg font-black">My pitches</h2>
+              {state.pitches.map((p) => (
+                <article key={p.id} className={`${CARD} py-3 text-sm`}>
+                  <p className="font-black">
+                    {COMPANIES[p.ticker].emoji} {usd(p.usdc_micro)} of {COMPANIES[p.ticker].name}
+                  </p>
+                  <p className="font-semibold opacity-80">{pitchStatus(p, night)}</p>
+                  {p.txUrl && (
+                    <a href={p.txUrl} target="_blank" rel="noreferrer" className="font-bold underline">
+                      See it on Basescan ↗
+                    </a>
+                  )}
+                </article>
+              ))}
+            </section>
+          )}
+        </>
+      )}
+
+      {tab === "goals" && (
+        <>
+          <h2 className="text-3xl font-black">My Goals</h2>
+          <p className="text-sm font-black uppercase tracking-wide opacity-70">Save today for what you want tomorrow</p>
+          {goal ? (
+            <section className={`${CARD} overflow-hidden p-0`}>
+              <div className="flex items-center justify-between bg-[#EDE7FF] p-5">
+                <div>
+                  <p className="text-sm font-bold opacity-70">Savings</p>
+                  <p className="text-4xl font-black">{usd(savings)}</p>
+                </div>
+                <span className="text-6xl" aria-hidden>
+                  {goal.emoji}
+                </span>
+              </div>
+              <div className="p-5">
+                <div className="flex justify-between font-black">
+                  <span>Saved {goalPct}%</span>
+                  <span className="text-sm">
+                    {usd(savings)} / {usd(goal.targetMicro)}
+                  </span>
+                </div>
+                <div className="mt-2 h-4 overflow-hidden rounded-full border-2 border-ink bg-white" role="progressbar" aria-valuenow={goalPct} aria-valuemin={0} aria-valuemax={100} aria-label={goal.name}>
+                  <div className="h-full" style={{ width: `${goalPct}%` }} />
+                </div>
+                <p className="mt-3 font-black">
+                  {goal.emoji} {goal.name}
+                </p>
+                <button type="button" onClick={() => setGoal(null)} className="mt-2 text-sm font-bold underline">
+                  Change goal
+                </button>
+              </div>
+            </section>
+          ) : (
+            <GoalPicker onPick={setGoal} />
+          )}
+        </>
+      )}
+
+      {tab === "report" && (night ? <p className={CARD}>🌙 Your Morning Report is ready after 6am. Sweet dreams!</p> : <MorningReport state={state} busy={busy} onThank={onThank} />)}
+
+      <button type="button" onClick={onLeave} className="self-start text-sm font-bold underline">
         I&apos;m done, give the phone back
       </button>
       <p className="text-xs opacity-70">Kids can only ask. Only a grown-up can approve, with Face ID. Learning only, not financial advice.</p>
-    </>
+      <span className="hidden">{panel}</span>
+
+      {/* Bottom tab bar */}
+      <nav aria-label="Kid sections" className="fixed inset-x-0 bottom-0 z-40 p-3">
+        <div className="mx-auto grid max-w-xl grid-cols-4 rounded-3xl border-2 border-ink bg-white p-1.5 text-ink shadow-[0_4px_0_0_#25243A]">
+          {(
+            [
+              ["home", "🏠", "Home"],
+              ["invest", "🚀", "Invest"],
+              ["goals", "🎯", "Goals"],
+              ["report", "☀️", "Report"],
+            ] as const
+          ).map(([id, icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-current={tab === id ? "page" : undefined}
+              onClick={() => go(id)}
+              className={`flex flex-col items-center rounded-2xl py-1.5 text-xs font-black ${tab === id ? "bg-[#EDE7FF]" : ""}`}
+            >
+              <span className="text-xl">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function GoalPicker({ onPick }: { onPick: (g: Goal) => void }) {
+  const [pick, setPick] = useState(GOAL_IDEAS[0]);
+  const [target, setTarget] = useState("20");
+  return (
+    <section className={`${CARD} flex flex-col gap-3`}>
+      <p className="font-black">What are you saving for?</p>
+      <div className="grid grid-cols-2 gap-2">
+        {GOAL_IDEAS.map((g) => (
+          <button
+            key={g.name}
+            type="button"
+            aria-pressed={pick.name === g.name}
+            onClick={() => setPick(g)}
+            className={`rounded-2xl border-2 border-ink p-3 text-left font-black ${pick.name === g.name ? "bg-[#E6F59A]" : "bg-white"}`}
+          >
+            <span className="text-3xl">{g.emoji}</span>
+            <span className="block text-sm">{g.name}</span>
+          </button>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 font-bold">
+        It costs $
+        <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="w-24 rounded-xl p-2" />
+      </label>
+      <button
+        type="button"
+        disabled={!(Number(target) > 0)}
+        onClick={() => onPick({ ...pick, targetMicro: Math.round(Number(target) * 1e6) })}
+        className="rounded-2xl border-2 border-ink bg-star py-3 font-black text-white shadow-[0_4px_0_0_#25243A] disabled:opacity-60"
+      >
+        Start saving ↗
+      </button>
+    </section>
   );
 }
 
