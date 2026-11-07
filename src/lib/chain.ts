@@ -283,8 +283,8 @@ export async function graduateTx(kidId: Hash, to: `0x${string}`) {
   return { hash: receipt.transactionHash };
 }
 
-export async function graduatedTo(kidId: Hash) {
-  const to = await publicClient.readContract({ address: config.demoVault(), abi: vaultAbi, functionName: "graduatedTo", args: [kidId] });
+export async function graduatedTo(kidId: Hash, vault: `0x${string}` = config.demoVault()) {
+  const to = await publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "graduatedTo", args: [kidId] });
   return to === "0x0000000000000000000000000000000000000000" ? null : to;
 }
 

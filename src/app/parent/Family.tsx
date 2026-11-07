@@ -25,7 +25,10 @@ type KidRow = {
   periodSec: string;
   holdings: Holdings;
   allowance: { amountMicro: string; periodSec: string; nextReleaseAt: number } | null;
+  graduated_to: string | null;
+  graduation: { wallet: string | null } | null;
 };
+type Device = { id: string; kid_id: string; label: string; status: "pending" | "approved"; last_seen_at: string | null };
 type PitchRow = {
   id: number;
   kid_id: string;
@@ -49,6 +52,7 @@ type FamilyState = {
   kids: KidRow[];
   pitches: PitchRow[];
   giftLinks: { code: string; kid_id: string; kind: "single" | "group"; ticker: Ticker | null; target_micro: number | null }[];
+  devices: Device[];
 };
 
 const COMPANY: Record<Ticker, string> = { AAPL: "🍎 Apple", NVDA: "🎮 Nvidia" };
@@ -62,10 +66,14 @@ const usd = (micro: number | string | null | undefined) => {
 const PAYMASTER_URL = process.env.NEXT_PUBLIC_CDP_PAYMASTER_URL || undefined;
 
 const factoryAbi = parseAbi(["function createVault() returns (address)"]);
-const vaultAbi = parseAbi(["function setAllowance(bytes32 kidId, uint128 amount, uint64 period)", "function deposit(uint256 amount)"]);
+const vaultAbi = parseAbi([
+  "function setAllowance(bytes32 kidId, uint128 amount, uint64 period)",
+  "function deposit(uint256 amount)",
+  "function graduate(bytes32 kidId, address to)",
+]);
 const erc20Abi = parseAbi(["function approve(address spender, uint256 amount) returns (bool)"]);
 
-async function family(body?: unknown): Promise<FamilyState> {
+async function family<T = FamilyState>(body?: unknown): Promise<T> {
   const res = await fetch("/api/parent/family", body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
@@ -81,6 +89,8 @@ export default function Family() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { sendUserOperation } = useSendUserOperation();
+  const [gradLink, setGradLink] = useState<{ kidId: string; link: string } | null>(null);
+  const [invite, setInvite] = useState<{ kidId: string; code: string; link: string; qr: string } | null>(null);
 
   const refresh = useCallback(async () => setState(await family()), []);
   useEffect(() => {
@@ -150,7 +160,7 @@ export default function Family() {
           busy={!!busy}
           onApprove={(p) =>
             run("Waiting for Face ID, then buying real shares on Base…", async () => {
-              const optionsJSON = await family({ action: "approve-options", pitchId: p.id });
+              const optionsJSON = await family<object>({ action: "approve-options", pitchId: p.id });
               let response;
               try {
                 response = await startAuthentication({ optionsJSON: optionsJSON as never });
@@ -211,6 +221,31 @@ export default function Family() {
               busy={!!busy}
               onSave={(patch) => run(`Saving ${k.nickname}'s settings…`, async () => setState(await family({ action: "kid-settings", kidId: k.id, ...patch })))}
               onResetPin={(pin) => run("Resetting the PIN…", async () => setState(await family({ action: "reset-pin", kidId: k.id, pin })))}
+              onGraduateLink={() =>
+                run("Making a graduation link…", async () => {
+                  const r = await family<FamilyState & { graduateLink: string }>({ action: "graduate-invite", kidId: k.id });
+                  setState(r);
+                  setGradLink({ kidId: k.id, link: r.graduateLink });
+                })
+              }
+              gradLink={gradLink?.kidId === k.id ? gradLink.link : null}
+              onGraduate={() =>
+                run(`Waiting for Face ID, then graduating ${k.nickname} on Base…`, async () => {
+                  const optionsJSON = await family<object>({ action: "graduate-options", kidId: k.id });
+                  let response;
+                  try {
+                    response = await startAuthentication({ optionsJSON: optionsJSON as never });
+                  } catch {
+                    throw new Error("Face ID was cancelled. Nothing moved.");
+                  }
+                  const ok = await family<{ chainKidId: `0x${string}`; wallet: `0x${string}` }>({ action: "graduate-check", kidId: k.id, response });
+                  await sponsored(
+                    [{ to: state.parent.vault!, data: encodeFunctionData({ abi: vaultAbi, functionName: "graduate", args: [ok.chainKidId, ok.wallet] }) }],
+                    (s) => !!s.kids.find((x) => x.id === k.id)?.graduated_to,
+                    () => family({ action: "graduate-confirm", kidId: k.id }),
+                  );
+                })
+              }
               onSetAllowance={(micro, period) =>
                 run(`Setting ${k.nickname}'s allowance on Base…`, async () => {
                   await family({ action: "kid-settings", kidId: k.id, allowance: Number(micro) / 1e6, allowancePeriod: period });
@@ -229,6 +264,23 @@ export default function Family() {
             onCreate={(input) =>
               run(input.kind === "group" ? "Opening the group gift on Base…" : "Making a gift link…", async () =>
                 setState(await family({ action: "gift-link", ...input })),
+              )
+            }
+          />
+          <Devices
+            state={state}
+            busy={!!busy}
+            invite={invite}
+            onInvite={(kidId) =>
+              run("Making a family code…", async () => {
+                const r = await family<FamilyState & { invite: { code: string; link: string; qr: string } }>({ action: "invite", kidId });
+                setState(r);
+                setInvite({ kidId, ...r.invite });
+              })
+            }
+            onSet={(deviceId, approve) =>
+              run(approve ? "Approving the device…" : "Removing the device…", async () =>
+                setState(await family({ action: approve ? "device-approve" : "device-remove", deviceId })),
               )
             }
           />
@@ -349,12 +401,18 @@ function KidCard({
   onSave,
   onResetPin,
   onSetAllowance,
+  onGraduateLink,
+  gradLink,
+  onGraduate,
 }: {
   kid: KidRow;
   busy: boolean;
   onSave: (patch: Record<string, unknown>) => void;
   onResetPin: (pin: string) => void;
   onSetAllowance: (micro: bigint, period: "weekly" | "monthly") => void;
+  onGraduateLink: () => void;
+  gradLink: string | null;
+  onGraduate: () => void;
 }) {
   const [allowance, setAllowance] = useState(String(kid.allowance_micro / 1e6 || 1));
   const [period, setPeriod] = useState(kid.allowance_period);
@@ -459,6 +517,44 @@ function KidCard({
           Reset PIN
         </button>
       </form>
+
+      <fieldset className="flex flex-col gap-2 rounded-xl bg-night-800 p-3 text-sm">
+        <legend className="px-1 font-semibold">🎓 Graduation (at 18)</legend>
+        {kid.graduated_to ? (
+          <p>
+            Graduated. Everything moved to {kid.nickname}&apos;s own wallet{" "}
+            <a className="break-all underline" href={`https://basescan.org/address/${kid.graduated_to}#tokentxns`} target="_blank" rel="noreferrer">
+              {kid.graduated_to}
+            </a>
+            .
+          </p>
+        ) : kid.graduation?.wallet ? (
+          <>
+            <p className="break-all">
+              {kid.nickname} signed up with their own wallet: <span className="font-mono">{kid.graduation.wallet}</span>. It passed every stock&apos;s transfer rules.
+            </p>
+            <button type="button" disabled={busy} onClick={onGraduate} className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60">
+              🔐 Graduate {kid.nickname} with Face ID
+            </button>
+            <p className="text-xs text-moon-dim">Moves every share and their savings out of the family vault in one transaction. You stay connected and can still gift.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-moon-dim">
+              {kid.nickname} signs up with their own email and gets their own wallet. Then you move their shares to it. Their history comes with them.
+            </p>
+            {gradLink ? (
+              <p className="break-all">
+                Send {kid.nickname} this link (24 hours, one use): <span className="font-mono">{gradLink}</span>
+              </p>
+            ) : (
+              <button type="button" disabled={busy} onClick={onGraduateLink} className="self-start rounded-lg bg-night-700 px-3 py-2 disabled:opacity-60">
+                Start graduation
+              </button>
+            )}
+          </>
+        )}
+      </fieldset>
     </section>
   );
 }
@@ -612,6 +708,82 @@ function GiftLinks({
             );
           })}
         </ul>
+      )}
+    </section>
+  );
+}
+
+function Devices({
+  state,
+  busy,
+  invite,
+  onInvite,
+  onSet,
+}: {
+  state: FamilyState;
+  busy: boolean;
+  invite: { kidId: string; code: string; link: string; qr: string } | null;
+  onInvite: (kidId: string) => void;
+  onSet: (deviceId: string, approve: boolean) => void;
+}) {
+  const kid = (id: string) => state.kids.find((k) => k.id === id);
+  const pending = state.devices.filter((d) => d.status === "pending");
+  const approved = state.devices.filter((d) => d.status === "approved");
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
+      <h2 className="text-lg font-semibold">📱 Kids&apos; devices</h2>
+      {pending.map((d) => (
+        <div key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-sunrise-100 p-3 text-ink">
+          <span className="flex-1">
+            {kid(d.kid_id)?.avatar} {kid(d.kid_id)?.nickname}&apos;s {d.label} wants to join. Approve?
+          </span>
+          <button type="button" disabled={busy} onClick={() => onSet(d.id, true)} className="rounded-lg bg-night-900 px-3 py-1 font-semibold text-moon disabled:opacity-60">
+            Approve
+          </button>
+          <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="rounded-lg bg-white px-3 py-1 disabled:opacity-60">
+            No
+          </button>
+        </div>
+      ))}
+      {approved.map((d) => (
+        <div key={d.id} className="flex items-center gap-2 text-sm">
+          <span className="flex-1">
+            {kid(d.kid_id)?.avatar} {kid(d.kid_id)?.nickname}&apos;s {d.label}
+            {d.last_seen_at ? ` · last used ${new Date(d.last_seen_at).toLocaleDateString()}` : ""}
+          </span>
+          <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="underline disabled:opacity-60">
+            Remove
+          </button>
+        </div>
+      ))}
+      <p className="text-sm text-moon-dim">
+        On this phone, use &quot;Hand the phone to a kid&quot;. For their own tablet or a school phone, make a family code: they scan the QR code, open the link, or type the
+        6 characters at /join. Codes work once and last 24 hours, and you approve every new device.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {state.kids
+          .filter((k) => !k.graduated_to)
+          .map((k) => (
+            <button key={k.id} type="button" disabled={busy} onClick={() => onInvite(k.id)} className="rounded-lg bg-night-700 px-3 py-2 text-sm disabled:opacity-60">
+              Family code for {k.avatar} {k.nickname}
+            </button>
+          ))}
+      </div>
+      {invite && (
+        <div className="flex flex-col items-center gap-2 rounded-xl bg-white p-4 text-ink">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL QR code generated on our server */}
+          <img src={invite.qr} alt={`QR code to join as ${kid(invite.kidId)?.nickname}`} width={200} height={200} />
+          <p className="font-mono text-3xl tracking-[0.3em]">{invite.code}</p>
+          <p className="break-all text-xs">{invite.link}</p>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`Join our family on Allowance: ${invite.link} (code ${invite.code})`)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-[#25D366] px-3 py-1 text-sm font-semibold"
+          >
+            Send on WhatsApp
+          </a>
+        </div>
       )}
     </section>
   );

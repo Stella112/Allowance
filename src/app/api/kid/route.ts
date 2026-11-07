@@ -1,12 +1,14 @@
 import { AccountError, toResponse } from "@/lib/accounts/errors";
 import { createPitch, kidState } from "@/lib/accounts/family";
 import { sendThankYou } from "@/lib/accounts/report";
+import { deviceStillAllowed } from "@/lib/accounts/devices";
 import { checkPin, getKid, listKids } from "@/lib/accounts/kids";
 import { currentAppSession, endSession, startSession } from "@/lib/accounts/session";
 
 async function requireKid() {
   const s = await currentAppSession();
   if (!s || s.role !== "kid" || !s.kid_id) throw new AccountError("Please enter your PIN.", 401);
+  if (!(await deviceStillAllowed(s.device_id))) throw new AccountError("This device was removed by your parent.", 401);
   const kid = await getKid(s.kid_id);
   if (!kid) throw new AccountError("Please enter your PIN.", 401);
   return kid;

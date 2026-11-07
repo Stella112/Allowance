@@ -6,7 +6,9 @@ import { config, txUrl } from "../config";
 import { db } from "../db";
 import { isTicker, type Ticker } from "../stocks";
 import { AccountError } from "./errors";
+import { devicesOf } from "./devices";
 import { giftLinksOf } from "./gifts";
+import { pendingGraduation } from "./graduation";
 import { getKid, listKids, type Kid } from "./kids";
 import { verifyApproval } from "./passkeys";
 import { morningReport } from "./report";
@@ -52,7 +54,7 @@ async function kidChainState(vault: `0x${string}` | null, kid: Kid) {
 export async function familyState(parent: Parent) {
   const vault = parent.vault ? addr(parent.vault) : null;
   const kids = await listKids(parent.id);
-  const [walletUsdc, info, kidStates, pitches, links] = await Promise.all([
+  const [walletUsdc, info, kidStates, pitches, links, devices, graduations] = await Promise.all([
     usdcBalance(addr(parent.wallet)).catch(() => null),
     vault ? vaultInfo(vault).catch(() => null) : Promise.resolve(null),
     Promise.all(kids.map((k) => kidChainState(vault, k))),
@@ -68,6 +70,8 @@ export async function familyState(parent: Parent) {
           .limit(30)
       : Promise.resolve({ data: [] }),
     giftLinksOf(parent.id),
+    devicesOf(parent.id),
+    Promise.all(kids.map((k) => pendingGraduation(k.id))),
   ]);
   return {
     parent: { email: parent.email, wallet: parent.wallet, vault: parent.vault, timezone: parent.timezone },
@@ -75,7 +79,13 @@ export async function familyState(parent: Parent) {
     usdc: config.usdc(),
     walletUsdcMicro: walletUsdc?.toString() ?? null,
     familyUsdcMicro: info?.familyUsdc.toString() ?? null,
-    kids: kids.map((k, i) => ({ ...k, ...kidStates[i], periodSec: PERIOD_SEC[k.allowance_period].toString() })),
+    kids: kids.map((k, i) => ({
+      ...k,
+      ...kidStates[i],
+      periodSec: PERIOD_SEC[k.allowance_period].toString(),
+      graduation: graduations[i] ? { wallet: graduations[i]!.graduate_wallet } : null,
+    })),
+    devices,
     pitches: ((pitches.data ?? []) as Pitch[]).map(withTx),
     giftLinks: links.map((l) => ({ code: l.code, kid_id: l.kid_id, kind: l.kind, ticker: l.ticker, target_micro: l.target_micro })),
   };
