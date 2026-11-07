@@ -90,6 +90,7 @@ export default function Family() {
   const [error, setError] = useState<string | null>(null);
   const { sendUserOperation } = useSendUserOperation();
   const [gradLink, setGradLink] = useState<{ kidId: string; link: string } | null>(null);
+  const [tab, setTab] = useState<"home" | "kids" | "gifts" | "devices">("home");
   const [invite, setInvite] = useState<{ kidId: string; code: string; link: string; qr: string } | null>(null);
 
   const refresh = useCallback(async () => setState(await family()), []);
@@ -141,7 +142,7 @@ export default function Family() {
   const pending = state.pitches.filter((p) => p.status === "pending");
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-24">
       {error && (
         <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
           {error}
@@ -203,6 +204,35 @@ export default function Family() {
         </section>
       ) : (
         <>
+
+          <nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE7FF] bg-white/90 backdrop-blur">
+            <div className="mx-auto grid max-w-xl grid-cols-4">
+              {(
+                [
+                  ["home", "🏠", "Home"],
+                  ["kids", "🧒", "Kids"],
+                  ["gifts", "🎁", "Gifts"],
+                  ["devices", "📱", "Devices"],
+                ] as const
+              ).map(([id, icon, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-current={tab === id ? "page" : undefined}
+                  onClick={() => {
+                    setTab(id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className={`flex flex-col items-center gap-0.5 py-2 text-xs font-bold ${tab === id ? "text-star" : "text-moon-dim"}`}
+                >
+                  <span className={`grid h-8 w-12 place-items-center rounded-full text-lg ${tab === id ? "bg-[#EDE7FF]" : ""}`}>{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          {tab === "home" && (
+            <>
           <Pool state={state} busy={!!busy} onDeposit={(micro) =>
             run("Adding money to the family pool…", () =>
               sponsored(
@@ -214,7 +244,34 @@ export default function Family() {
               ),
             )
           } />
-          {state.kids.map((k) => (
+              <div className="grid grid-cols-3 gap-3">
+                <button type="button" onClick={() => setTab("kids")} className="rounded-3xl bg-[#DDF5E8] p-4 text-left">
+                  <span className="text-2xl">🧒</span>
+                  <span className="mt-2 block text-sm font-bold">Kids & allowance</span>
+                </button>
+                <button type="button" onClick={() => setTab("gifts")} className="rounded-3xl bg-[#FFE6DD] p-4 text-left">
+                  <span className="text-2xl">🎁</span>
+                  <span className="mt-2 block text-sm font-bold">Gift links</span>
+                </button>
+                <Link href="/kid" className="rounded-3xl bg-[#FFF1C9] p-4 text-left">
+                  <span className="text-2xl">🤳</span>
+                  <span className="mt-2 block text-sm font-bold">Hand to a kid</span>
+                </Link>
+              </div>
+              <h2 className="mt-2 text-lg font-extrabold">Your kids</h2>
+              {state.kids.map((k) => (
+                <button key={k.id} type="button" onClick={() => setTab("kids")} className="flex items-center gap-3 rounded-3xl bg-white p-4 text-left">
+                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#FFE6DD] text-2xl">{k.avatar}</span>
+                  <span className="flex-1">
+                    <span className="block font-extrabold">{k.nickname}</span>
+                    <span className="text-sm text-moon-dim">Savings {usd(k.holdings?.usdcMicro)}</span>
+                  </span>
+                  <span className="text-star">›</span>
+                </button>
+              ))}
+            </>
+          )}
+          {tab === "kids" && state.kids.map((k) => (
             <KidCard
               key={k.id}
               kid={k}
@@ -258,7 +315,7 @@ export default function Family() {
               }
             />
           ))}
-          <GiftLinks
+          {tab === "gifts" && <GiftLinks
             state={state}
             busy={!!busy}
             onCreate={(input) =>
@@ -266,8 +323,8 @@ export default function Family() {
                 setState(await family({ action: "gift-link", ...input })),
               )
             }
-          />
-          <Devices
+          />}
+          {tab === "devices" && <Devices
             state={state}
             busy={!!busy}
             invite={invite}
@@ -283,11 +340,8 @@ export default function Family() {
                 setState(await family({ action: approve ? "device-approve" : "device-remove", deviceId })),
               )
             }
-          />
-          <AddKid busy={!!busy} onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />
-          <Link href="/kid" className="rounded-xl bg-night-800 px-4 py-3 text-center font-semibold">
-            👦🏾 Hand the phone to a kid (switch profile)
-          </Link>
+          />}
+          {tab === "kids" && <AddKid busy={!!busy} onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />}
           <button type="button" onClick={() => refresh().catch(() => {})} className="self-start text-sm underline">
             Refresh
           </button>

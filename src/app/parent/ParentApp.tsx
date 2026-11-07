@@ -114,6 +114,15 @@ function ParentFlow() {
 
   return (
     <>
+      {me ? (
+        <header className="flex items-center gap-3">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-star text-2xl text-white">🌙</span>
+          <div>
+            <p className="text-sm text-moon-dim">Good to see you</p>
+            <h1 className="text-2xl font-extrabold">Your family</h1>
+          </div>
+        </header>
+      ) : (
       <header>
         <p className="text-5xl" aria-hidden>
           🌙
@@ -121,6 +130,7 @@ function ParentFlow() {
         <h1 className="mt-2 text-3xl font-bold">For parents</h1>
         <p className="mt-1 text-moon-dim">Sign in with your email and a 6-digit code. No password, no seed phrase. A secure wallet is created for you on Base.</p>
       </header>
+      )}
 
       {error && (
         <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
