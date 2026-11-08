@@ -539,7 +539,7 @@ function KidCard({
         </div>
         <p className="text-xs text-moon-dim">
           {onChain
-            ? `On Base: ${usd(kid.allowance!.amountMicro)} every ${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "month" : "week"}. Next one can land after ${new Date(kid.allowance!.nextReleaseAt * 1000).toLocaleString()}.`
+            ? `On Base: ${usd(kid.allowance!.amountMicro)} every ${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "month" : "week"}. ${kid.allowance!.nextReleaseAt === 0 ? "The next one lands at tonight's midnight night shift (if the family pool has enough)." : `Next one lands after ${new Date(kid.allowance!.nextReleaseAt * 1000).toLocaleString()}.`}`
             : "Not set on Base yet."}{" "}
           It moves from the family pool into {kid.nickname}&apos;s savings. It doesn&apos;t buy anything by itself.
         </p>
