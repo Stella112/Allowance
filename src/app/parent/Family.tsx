@@ -1,8 +1,8 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { useSendUserOperation } from "@coinbase/cdp-hooks";
 import { startAuthentication } from "@simplewebauthn/browser";
+import { Icon, TabBar } from "@/components/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, parseAbi } from "viem";
@@ -143,7 +143,7 @@ export default function Family() {
   const pending = state.pitches.filter((p) => p.status === "pending");
 
   return (
-    <div className="flex flex-col gap-4 pb-24">
+    <div className="flex flex-col gap-4">
       {error && (
         <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
           {error}
@@ -155,7 +155,51 @@ export default function Family() {
         </p>
       )}
 
-      {pending.length > 0 && (
+      {state.kids.length === 0 ? (
+        <AddKid busy={!!busy} first onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />
+      ) : !state.parent.vault ? (
+        <section className="card flex flex-col gap-3">
+          <h2 className="section-title">Create your family vault on Base</h2>
+          <p className="text-sm text-moon-dim">
+            Your vault holds the family&apos;s USDC and shares, tracked per kid. Only you own it. Allowance&apos;s helper can only do what you approve, inside the limits
+            set in the contract ($5 per transaction, $20 per kid per month, $100 in total).
+          </p>
+          <p className="text-sm">Cost: free for you. Allowance sponsors the network fee through Coinbase.</p>
+          <button
+            type="button"
+            disabled={!!busy}
+            onClick={() =>
+              run("Creating your family vault on Base…", () =>
+                sponsored(
+                  [{ to: state.factory, data: encodeFunctionData({ abi: factoryAbi, functionName: "createVault" }) }],
+                  (s) => !!s.parent.vault,
+                  () => family({ action: "confirm-vault" }),
+                ),
+              )
+            }
+            className="btn"
+          >
+            Create family vault
+          </button>
+        </section>
+      ) : (
+        <>
+
+          <TabBar
+            label="Sections"
+            active={tab}
+            onPick={(id) => {
+              setTab(id);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            items={[
+              { id: "home", label: "Home", icon: <Icon name="home" />, badge: pending.length },
+              { id: "kids", label: "Kids", icon: <Icon name="kids" /> },
+              { id: "gifts", label: "Gifts", icon: <Icon name="gift" /> },
+              { id: "devices", label: "Devices", icon: <Icon name="phone" /> },
+            ]}
+          />
+          {tab === "home" && pending.length > 0 && (
         <Inbox
           state={state}
           pitches={pending}
@@ -176,104 +220,61 @@ export default function Family() {
         />
       )}
 
-      {state.kids.length === 0 ? (
-        <AddKid busy={!!busy} first onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />
-      ) : !state.parent.vault ? (
-        <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
-          <h2 className="text-lg font-semibold">Create your family vault on Base</h2>
-          <p className="text-sm text-moon-dim">
-            Your vault holds the family&apos;s USDC and shares, tracked per kid. Only you own it. Allowance&apos;s helper can only do what you approve, inside the limits
-            set in the contract ($5 per transaction, $20 per kid per month, $100 in total).
-          </p>
-          <p className="text-sm">Cost: free for you. Allowance sponsors the network fee through Coinbase.</p>
-          <button
-            type="button"
-            disabled={!!busy}
-            onClick={() =>
-              run("Creating your family vault on Base…", () =>
-                sponsored(
-                  [{ to: state.factory, data: encodeFunctionData({ abi: factoryAbi, functionName: "createVault" }) }],
-                  (s) => !!s.parent.vault,
-                  () => family({ action: "confirm-vault" }),
-                ),
-              )
-            }
-            className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60"
-          >
-            🏦 Create family vault
-          </button>
-        </section>
-      ) : (
-        <>
-
-          {createPortal(
-<nav aria-label="Sections" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE7FF] bg-white/90 backdrop-blur">
-            <div className="mx-auto grid max-w-xl grid-cols-4">
-              {(
-                [
-                  ["home", "🏠", "Home"],
-                  ["kids", "🧒", "Kids"],
-                  ["gifts", "🎁", "Gifts"],
-                  ["devices", "📱", "Devices"],
-                ] as const
-              ).map(([id, icon, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-current={tab === id ? "page" : undefined}
-                  onClick={() => {
-                    setTab(id);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`flex flex-col items-center gap-0.5 py-2 text-xs font-bold ${tab === id ? "text-star" : "text-moon-dim"}`}
-                >
-                  <span className={`grid h-8 w-12 place-items-center rounded-full text-lg ${tab === id ? "bg-[#EDE7FF]" : ""}`}>{icon}</span>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </nav>,
- document.body)}
           {tab === "home" && (
-            <>
-          <Pool state={state} busy={!!busy} onDeposit={(micro) =>
-            run("Adding money to the family pool…", () =>
-              sponsored(
-                [
-                  { to: state.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [state.parent.vault!, micro] }) },
-                  { to: state.parent.vault!, data: encodeFunctionData({ abi: vaultAbi, functionName: "deposit", args: [micro] }) },
-                ],
-                (s) => BigInt(s.familyUsdcMicro ?? 0) >= BigInt(state.familyUsdcMicro ?? 0) + micro,
-              ),
-            )
-          } />
-              <div className="grid grid-cols-3 gap-3">
-                <button type="button" onClick={() => setTab("kids")} className="rounded-3xl bg-[#DDF5E8] p-4 text-left">
-                  <span className="text-2xl">🧒</span>
-                  <span className="mt-2 block text-sm font-bold">Kids & allowance</span>
-                </button>
-                <button type="button" onClick={() => setTab("gifts")} className="rounded-3xl bg-[#FFE6DD] p-4 text-left">
-                  <span className="text-2xl">🎁</span>
-                  <span className="mt-2 block text-sm font-bold">Gift links</span>
-                </button>
-                <Link href="/kid" className="rounded-3xl bg-[#FFF1C9] p-4 text-left">
-                  <span className="text-2xl">🤳</span>
-                  <span className="mt-2 block text-sm font-bold">Hand to a kid</span>
-                </Link>
-              </div>
-              <h2 className="mt-2 text-lg font-extrabold">Your kids</h2>
-              {state.kids.map((k) => (
-                <button key={k.id} type="button" onClick={() => setTab("kids")} className="flex items-center gap-3 rounded-3xl bg-white p-4 text-left">
-                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#FFE6DD] text-2xl">{k.avatar}</span>
-                  <span className="flex-1">
-                    <span className="block font-extrabold">{k.nickname}</span>
-                    <span className="text-sm text-moon-dim">Savings {usd(k.holdings?.usdcMicro)}</span>
-                  </span>
-                  <span className="text-star">›</span>
-                </button>
-              ))}
-            </>
+            <div>
+              <Pool
+                state={state}
+                busy={!!busy}
+                onDeposit={(micro) =>
+                  run("Adding money to the family pool…", () =>
+                    sponsored(
+                      [
+                        { to: state.usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [state.parent.vault!, micro] }) },
+                        { to: state.parent.vault!, data: encodeFunctionData({ abi: vaultAbi, functionName: "deposit", args: [micro] }) },
+                      ],
+                      (s) => BigInt(s.familyUsdcMicro ?? 0) >= BigInt(state.familyUsdcMicro ?? 0) + micro,
+                    ),
+                  )
+                }
+              />
+              <section className="stack-lime">
+                <p className="section-title">Send a gift link</p>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex flex-1 -space-x-2">
+                    {state.kids.map((k) => (
+                      <span key={k.id} title={k.nickname} className="grid h-11 w-11 place-items-center rounded-full border-2 border-lime bg-white text-xl">
+                        {k.avatar}
+                      </span>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setTab("gifts")} className="btn btn-sm">
+                    Share a link
+                  </button>
+                </div>
+              </section>
+              <section className="stack-sheet">
+                <div className="row">
+                  <h2 className="section-title flex-1">Your kids</h2>
+                  <Link href="/kid" className="text-sm font-extrabold text-moon-dim">
+                    Hand to a kid
+                  </Link>
+                </div>
+                {state.kids.map((k) => (
+                  <button key={k.id} type="button" onClick={() => setTab("kids")} className="row">
+                    <span className="tile" aria-hidden>
+                      {k.avatar}
+                    </span>
+                    <span className="flex-1 font-extrabold">{k.nickname}</span>
+                    <span className="text-sm font-bold text-moon-dim">{usd(k.holdings?.usdcMicro)} saved</span>
+                    <span className="text-moon-dim" aria-hidden>
+                      ›
+                    </span>
+                  </button>
+                ))}
+              </section>
+            </div>
           )}
+          {tab === "kids" && <h1 className="screen-title">Kids</h1>}
           {tab === "kids" && state.kids.map((k) => (
             <KidCard
               key={k.id}
@@ -345,7 +346,7 @@ export default function Family() {
             }
           />}
           {tab === "kids" && <AddKid busy={!!busy} onAdd={(k) => run(`Adding ${k.nickname}…`, async () => setState(await family({ action: "add-kid", ...k })))} />}
-          <button type="button" onClick={() => refresh().catch(() => {})} className="self-start text-sm underline">
+          <button type="button" onClick={() => refresh().catch(() => {})} className="self-center text-sm font-extrabold text-moon-dim underline">
             Refresh
           </button>
         </>
@@ -370,20 +371,27 @@ function Inbox({
   onDecline: (p: PitchRow) => void;
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-sunrise-50 p-5 text-ink">
-      <h2 className="text-lg font-semibold">☀️ Waiting for you</h2>
+    <section className="flex flex-col gap-3">
+      <h2 className="section-title">Waiting for you</h2>
       {pitches.map((p) => {
         const kid = state.kids.find((k) => k.id === p.kid_id);
         const match = kid ? Math.floor((p.usdc_micro * kid.match_pct) / 100) : 0;
         return (
-          <article key={p.id} className="rounded-xl bg-white p-4">
-            <p className="font-semibold">
-              {kid?.avatar} {kid?.nickname} wants to buy {usd(p.usdc_micro)} of {COMPANY[p.ticker]}
-            </p>
-            <p className="mt-1">“{p.why}”</p>
+          <article key={p.id} className="card flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <span className="tile" aria-hidden>
+                {kid?.avatar}
+              </span>
+              <div>
+                <p className="font-extrabold leading-snug">
+                  {kid?.nickname} wants {usd(p.usdc_micro)} of {COMPANY[p.ticker]}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-moon-dim">“{p.why}”</p>
+              </div>
+            </div>
             {p.coach_q && (
-              <p className="mt-2 rounded-lg bg-sunrise-50 p-2 text-sm">
-                🧑‍🏫 Coach asked: {p.coach_q}
+              <p className="rounded-2xl bg-night-800 p-3 text-sm font-semibold">
+                Coach asked: {p.coach_q}
                 {p.coach_a && (
                   <>
                     <br />
@@ -392,18 +400,16 @@ function Inbox({
                 )}
               </p>
             )}
-            <p className="mt-2 text-xs opacity-80">
+            <p className="note">
               Approving buys {usd(p.usdc_micro + match)} of a real Coinbase tokenized share on Base: {usd(p.usdc_micro)} from {kid?.nickname}&apos;s savings
               {match ? ` + ${usd(match)} from your pool (${kid?.match_pct}% match)` : ""}. Held in your family vault.
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" disabled={busy} onClick={() => onApprove(p)} className="rounded-xl bg-night-900 px-3 py-3 font-semibold text-moon disabled:opacity-60">
-                🔐 Approve with Face ID
-              </button>
-              <button type="button" disabled={busy} onClick={() => onDecline(p)} className="rounded-xl bg-sunrise-100 px-3 py-3 font-semibold disabled:opacity-60">
-                Not this time
-              </button>
-            </div>
+            <button type="button" disabled={busy} onClick={() => onApprove(p)} className="btn">
+              Approve with Face ID
+            </button>
+            <button type="button" disabled={busy} onClick={() => onDecline(p)} className="btn btn-soft">
+              Not this time
+            </button>
           </article>
         );
       })}
@@ -413,36 +419,14 @@ function Inbox({
 
 function Pool({ state, busy, onDeposit }: { state: FamilyState; busy: boolean; onDeposit: (micro: bigint) => void }) {
   const [amount, setAmount] = useState("1");
+  const empty = Number(state.walletUsdcMicro ?? 0) === 0;
   return (
-    <section className="flex flex-col gap-3 rounded-3xl bg-white p-5">
-      <div className="rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white">
-        <p className="text-sm opacity-80">🏦 Family pool</p>
-        <p className="mt-1 text-4xl font-extrabold">{usd(state.familyUsdcMicro)}</p>
-        <p className="mt-1 text-xs opacity-80">Pays allowances and your matches · live from your vault on Base</p>
-        <div className="mt-4 flex -space-x-2">
-          {state.kids.map((k) => (
-            <span key={k.id} title={k.nickname} className="grid h-10 w-10 place-items-center rounded-full border-2 border-white bg-[#FFE6DD] text-xl">
-              {k.avatar}
-            </span>
-          ))}
-        </div>
-      </div>
-      <p className="break-all text-xs text-moon-dim">
-        Vault:{" "}
-        <a className="underline" href={`https://basescan.org/address/${state.parent.vault}`} target="_blank" rel="noreferrer">
-          {state.parent.vault}
-        </a>
-      </p>
-      <p className="mt-2 text-sm">
-        Your wallet has {usd(state.walletUsdcMicro)} USDC.{" "}
-        {Number(state.walletUsdcMicro ?? 0) === 0 && (
-          <span className="text-moon-dim">
-            Send USDC on Base to <span className="break-all font-mono">{state.parent.wallet}</span> to add money.
-          </span>
-        )}
-      </p>
+    <section className="stack-hero">
+      <p className="eyebrow">Family pool</p>
+      <p className="stat mt-1">{usd(state.familyUsdcMicro)}</p>
+      <p className="eyebrow mt-1">Pays allowances and your matches</p>
       <form
-        className="flex gap-2"
+        className="mt-4 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           const micro = BigInt(Math.round(Number(amount) * 1e6));
@@ -452,11 +436,18 @@ function Pool({ state, busy, onDeposit }: { state: FamilyState; busy: boolean; o
         <label className="sr-only" htmlFor="deposit">
           Amount to add in US dollars
         </label>
-        <input id="deposit" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-28 rounded-xl bg-white p-3 text-ink" />
-        <button type="submit" disabled={busy || Number(state.walletUsdcMicro ?? 0) === 0} className="flex-1 rounded-xl bg-star px-4 font-semibold text-night-950 disabled:opacity-60">
+        <input id="deposit" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="field w-24 flex-none border-0 bg-white" />
+        <button type="submit" disabled={busy || empty} className="btn flex-1">
           Add to pool
         </button>
       </form>
+      <p className="eyebrow mt-3">
+        Your wallet: {usd(state.walletUsdcMicro)} USDC ·{" "}
+        <a className="underline" href={`https://basescan.org/address/${state.parent.vault}`} target="_blank" rel="noreferrer">
+          View vault
+        </a>
+      </p>
+      {empty && <p className="eyebrow mt-1 break-all">Send USDC on Base to {state.parent.wallet} to add money.</p>}
     </section>
   );
 }
@@ -491,10 +482,10 @@ function KidCard({
   const onChain = kid.allowance && kid.allowance.amountMicro !== "0";
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
+    <section className="card flex flex-col gap-4 pb-2">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-3 text-xl font-extrabold">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#FFE6DD] text-2xl">{kid.avatar}</span>
+          <span className="tile" aria-hidden>{kid.avatar}</span>
           <span>
             {kid.nickname}
             <span className="block text-sm font-semibold text-moon-dim">Age {age}</span>
@@ -503,134 +494,140 @@ function KidCard({
         {kid.paused && <span className="rounded-full bg-red-200 px-2 py-1 text-xs text-red-900">Paused</span>}
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-[#DDF5E8] p-3">
-          <p className="text-xs font-semibold text-[#1F6B4A]">💚 Savings</p>
+        <div className="rounded-2xl bg-night-800 p-3">
+          <p className="eyebrow">Savings</p>
           <p className="text-lg font-extrabold">{usd(kid.holdings?.usdcMicro)}</p>
         </div>
-        <div className="rounded-2xl bg-[#EDE7FF] p-3">
-          <p className="text-xs font-semibold text-star">📈 Shares</p>
+        <div className="rounded-2xl bg-night-800 p-3">
+          <p className="eyebrow">Shares</p>
           <p className="text-sm font-bold">{owned.length ? owned.map((s) => COMPANY[s.ticker].split(" ")[0]).join(" ") : "None yet"}</p>
         </div>
-        <div className="rounded-2xl bg-[#FFF1C9] p-3">
-          <p className="text-xs font-semibold text-[#8A6A00]">🌙 Allowance</p>
+        <div className="rounded-2xl bg-night-800 p-3">
+          <p className="eyebrow">Allowance</p>
           <p className="text-sm font-bold">{onChain ? `${usd(kid.allowance!.amountMicro)}/${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "mo" : "wk"}` : "Not set"}</p>
         </div>
       </div>
 
-      <fieldset className="flex flex-col gap-2 rounded-xl bg-night-800 p-3">
-        <legend className="px-1 text-sm font-semibold">Allowance (lands at midnight)</legend>
-        <div className="flex flex-wrap gap-2">
-          <label className="sr-only" htmlFor={`al-${kid.id}`}>
-            Allowance amount in US dollars
-          </label>
-          <input id={`al-${kid.id}`} inputMode="decimal" value={allowance} onChange={(e) => setAllowance(e.target.value)} className="w-24 rounded-lg bg-white p-2 text-ink" />
-          <select aria-label="How often" value={period} onChange={(e) => setPeriod(e.target.value as "weekly" | "monthly")} className="rounded-lg bg-white p-2 text-ink">
-            <option value="weekly">every week</option>
-            <option value="monthly">every month</option>
-          </select>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onSetAllowance(BigInt(Math.round(Number(allowance) * 1e6)), period)}
-            className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60"
-          >
-            Save on Base
-          </button>
-        </div>
-        <p className="text-xs text-moon-dim">
-          {onChain
-            ? `On Base: ${usd(kid.allowance!.amountMicro)} every ${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "month" : "week"}. ${kid.allowance!.nextReleaseAt === 0 ? "The next one lands at tonight's midnight night shift (if the family pool has enough)." : `Next one lands after ${new Date(kid.allowance!.nextReleaseAt * 1000).toLocaleString()}.`}`
-            : "Not set on Base yet."}{" "}
-          It moves from the family pool into {kid.nickname}&apos;s savings. It doesn&apos;t buy anything by itself.
-        </p>
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2 rounded-xl bg-night-800 p-3">
-        <legend className="px-1 text-sm font-semibold">Limits and match</legend>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <label className="flex flex-col gap-1">
-            Max per pitch ($)
-            <input inputMode="decimal" value={maxPitch} onChange={(e) => setMaxPitch(e.target.value)} className="rounded-lg bg-white p-2 text-ink" />
-          </label>
-          <label className="flex flex-col gap-1">
-            Max per month ($)
-            <input inputMode="decimal" value={maxMonth} onChange={(e) => setMaxMonth(e.target.value)} className="rounded-lg bg-white p-2 text-ink" />
-          </label>
-        </div>
-        <div role="group" aria-label="Match" className="grid grid-cols-4 gap-1">
-          {[0, 25, 50, 100].map((m) => (
-            <button key={m} type="button" aria-pressed={match === m} onClick={() => setMatch(m)} className={`rounded-lg px-2 py-2 text-sm ${match === m ? "bg-star font-semibold text-night-950" : "bg-night-700"}`}>
-              {m}% match
+      <div>
+        <details className="fold">
+          <summary>Allowance</summary>
+          <div className="fold-body">
+            <label className="sr-only" htmlFor={`al-${kid.id}`}>
+              Allowance amount in US dollars
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <input id={`al-${kid.id}`} inputMode="decimal" value={allowance} onChange={(e) => setAllowance(e.target.value)} className="field" />
+              <select aria-label="How often" value={period} onChange={(e) => setPeriod(e.target.value as "weekly" | "monthly")} className="field">
+                <option value="weekly">every week</option>
+                <option value="monthly">every month</option>
+              </select>
+            </div>
+            <button type="button" disabled={busy} onClick={() => onSetAllowance(BigInt(Math.round(Number(allowance) * 1e6)), period)} className="btn">
+              Save on Base
             </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onSave({ matchPct: match, maxPerPitch: Number(maxPitch), maxPerMonth: Number(maxMonth) })}
-            className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60"
-          >
-            Save limits
-          </button>
-          <button type="button" disabled={busy} onClick={() => onSave({ paused: !kid.paused })} className="rounded-lg bg-night-700 px-3 py-2 disabled:opacity-60">
-            {kid.paused ? "Unpause profile" : "Pause profile"}
-          </button>
-        </div>
-      </fieldset>
-
-      <form
-        className="flex flex-wrap items-center gap-2 text-sm"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onResetPin(pin);
-          setPin("");
-        }}
-      >
-        <label htmlFor={`pin-${kid.id}`}>New PIN</label>
-        <input id={`pin-${kid.id}`} inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} className="w-20 rounded-lg bg-white p-2 text-center text-ink" />
-        <button type="submit" disabled={busy || pin.length !== 4} className="rounded-lg bg-night-700 px-3 py-2 disabled:opacity-60">
-          Reset PIN
-        </button>
-      </form>
-
-      <fieldset className="flex flex-col gap-2 rounded-xl bg-night-800 p-3 text-sm">
-        <legend className="px-1 font-semibold">🎓 Graduation (at 18)</legend>
-        {kid.graduated_to ? (
-          <p>
-            Graduated. Everything moved to {kid.nickname}&apos;s own wallet{" "}
-            <a className="break-all underline" href={`https://basescan.org/address/${kid.graduated_to}#tokentxns`} target="_blank" rel="noreferrer">
-              {kid.graduated_to}
-            </a>
-            .
-          </p>
-        ) : kid.graduation?.wallet ? (
-          <>
-            <p className="break-all">
-              {kid.nickname} signed up with their own wallet: <span className="font-mono">{kid.graduation.wallet}</span>. It passed every stock&apos;s transfer rules.
+            <p className="note">
+              {onChain
+                ? `On Base: ${usd(kid.allowance!.amountMicro)} every ${Number(kid.allowance!.periodSec) >= 30 * 86_400 ? "month" : "week"}. ${kid.allowance!.nextReleaseAt === 0 ? "The next one lands at tonight's midnight night shift (if the family pool has enough)." : `Next one lands after ${new Date(kid.allowance!.nextReleaseAt * 1000).toLocaleString()}.`}`
+                : "Not set on Base yet."}{" "}
+              It moves from the family pool into {kid.nickname}&apos;s savings. It doesn&apos;t buy anything by itself.
             </p>
-            <button type="button" disabled={busy} onClick={onGraduate} className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60">
-              🔐 Graduate {kid.nickname} with Face ID
+          </div>
+        </details>
+
+        <details className="fold">
+          <summary>Limits and match</summary>
+          <div className="fold-body">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="label">Max per pitch ($)</span>
+                <input inputMode="decimal" value={maxPitch} onChange={(e) => setMaxPitch(e.target.value)} className="field" />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="label">Max per month ($)</span>
+                <input inputMode="decimal" value={maxMonth} onChange={(e) => setMaxMonth(e.target.value)} className="field" />
+              </label>
+            </div>
+            <p className="label">Match</p>
+            <div role="group" aria-label="Match" className="grid grid-cols-4 gap-1">
+              {[0, 25, 50, 100].map((m) => (
+                <button key={m} type="button" aria-pressed={match === m} onClick={() => setMatch(m)} className={`btn btn-sm px-1 ${match === m ? "" : "btn-soft"}`}>
+                  {m}%
+                </button>
+              ))}
+            </div>
+            <button type="button" disabled={busy} onClick={() => onSave({ matchPct: match, maxPerPitch: Number(maxPitch), maxPerMonth: Number(maxMonth) })} className="btn">
+              Save limits
             </button>
-            <p className="text-xs text-moon-dim">Moves every share and their savings out of the family vault in one transaction. You stay connected and can still gift.</p>
-          </>
-        ) : (
-          <>
-            <p className="text-moon-dim">
-              {kid.nickname} signs up with their own email and gets their own wallet. Then you move their shares to it. Their history comes with them.
-            </p>
-            {gradLink ? (
-              <p className="break-all">
-                Send {kid.nickname} this link (24 hours, one use): <span className="font-mono">{gradLink}</span>
+          </div>
+        </details>
+
+        <details className="fold">
+          <summary>Profile and PIN</summary>
+          <div className="fold-body">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onResetPin(pin);
+                setPin("");
+              }}
+            >
+              <label className="label" htmlFor={`pin-${kid.id}`}>
+                New PIN
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input id={`pin-${kid.id}`} inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} className="field text-center" />
+                <button type="submit" disabled={busy || pin.length !== 4} className="btn btn-soft">
+                  Reset PIN
+                </button>
+              </div>
+            </form>
+            <button type="button" disabled={busy} onClick={() => onSave({ paused: !kid.paused })} className="btn btn-soft">
+              {kid.paused ? "Unpause profile" : "Pause profile"}
+            </button>
+          </div>
+        </details>
+
+        <details className="fold">
+          <summary>Graduation at 18</summary>
+          <div className="fold-body text-sm">
+            {kid.graduated_to ? (
+              <p>
+                Graduated. Everything moved to {kid.nickname}&apos;s own wallet{" "}
+                <a className="break-all underline" href={`https://basescan.org/address/${kid.graduated_to}#tokentxns`} target="_blank" rel="noreferrer">
+                  {kid.graduated_to}
+                </a>
+                .
               </p>
+            ) : kid.graduation?.wallet ? (
+              <>
+                <p className="break-all">
+                  {kid.nickname} signed up with their own wallet: <span className="font-mono">{kid.graduation.wallet}</span>. It passed every stock&apos;s transfer rules.
+                </p>
+                <button type="button" disabled={busy} onClick={onGraduate} className="btn">
+                  Graduate {kid.nickname} with Face ID
+                </button>
+                <p className="note">Moves every share and their savings out of the family vault in one transaction. You stay connected and can still gift.</p>
+              </>
             ) : (
-              <button type="button" disabled={busy} onClick={onGraduateLink} className="self-start rounded-lg bg-night-700 px-3 py-2 disabled:opacity-60">
-                Start graduation
-              </button>
+              <>
+                <p className="text-moon-dim">
+                  {kid.nickname} signs up with their own email and gets their own wallet. Then you move their shares to it. Their history comes with them.
+                </p>
+                {gradLink ? (
+                  <p className="break-all">
+                    Send {kid.nickname} this link (24 hours, one use): <span className="font-mono">{gradLink}</span>
+                  </p>
+                ) : (
+                  <button type="button" disabled={busy} onClick={onGraduateLink} className="btn btn-soft">
+                    Start graduation
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
-      </fieldset>
+          </div>
+        </details>
+      </div>
     </section>
   );
 }
@@ -646,45 +643,45 @@ function AddKid({ busy, first, onAdd }: { busy: boolean; first?: boolean; onAdd:
 
   if (!open)
     return (
-      <button type="button" onClick={() => setOpen(true)} className="rounded-xl bg-night-800 px-4 py-3 font-semibold">
-        ➕ Add another child
+      <button type="button" onClick={() => setOpen(true)} className="btn btn-white shadow">
+        Add another child
       </button>
     );
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5"
+      className="card flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         onAdd({ nickname, birthYear: Number(birthYear), avatar, pin, consent });
       }}
     >
-      <h2 className="text-lg font-semibold">{first ? "Step 3: add your first child" : "Add a child"}</h2>
-      <label className="flex flex-col gap-1">
-        First name or nickname
-        <input value={nickname} maxLength={20} onChange={(e) => setNickname(e.target.value)} className="rounded-xl bg-white p-3 text-ink" autoComplete="off" />
+      <h2 className="section-title">{first ? "Step 3: add your first child" : "Add a child"}</h2>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">First name or nickname</span>
+        <input value={nickname} maxLength={20} onChange={(e) => setNickname(e.target.value)} className="field" autoComplete="off" />
       </label>
-      <label className="flex flex-col gap-1">
-        Birth year
-        <select value={birthYear} onChange={(e) => setBirthYear(e.target.value)} className="rounded-xl bg-white p-3 text-ink">
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Birth year</span>
+        <select value={birthYear} onChange={(e) => setBirthYear(e.target.value)} className="field">
           {years.map((y) => (
             <option key={y}>{y}</option>
           ))}
         </select>
       </label>
       <fieldset>
-        <legend>Avatar</legend>
-        <div className="mt-1 flex flex-wrap gap-2">
+        <legend className="label">Avatar</legend>
+        <div className="mt-1.5 grid grid-cols-5 gap-2">
           {AVATARS.map((a) => (
-            <button key={a} type="button" aria-pressed={avatar === a} aria-label={`Avatar ${a}`} onClick={() => setAvatar(a)} className={`rounded-xl p-2 text-2xl ${avatar === a ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}>
+            <button key={a} type="button" aria-pressed={avatar === a} aria-label={`Avatar ${a}`} onClick={() => setAvatar(a)} className={`rounded-2xl p-2 text-2xl ${avatar === a ? "bg-lime" : "bg-night-800"}`}>
               {a}
             </button>
           ))}
         </div>
       </fieldset>
-      <label className="flex flex-col gap-1">
-        4-digit PIN for {nickname || "your child"}
-        <input inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} className="w-32 rounded-xl bg-white p-3 text-center text-2xl tracking-widest text-ink" autoComplete="off" />
+      <label className="flex flex-col gap-1.5">
+        <span className="label">4-digit PIN for {nickname || "your child"}</span>
+        <input inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} className="field text-center text-2xl tracking-[0.5em]" autoComplete="off" />
       </label>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />
@@ -693,7 +690,7 @@ function AddKid({ busy, first, onAdd }: { busy: boolean; first?: boolean; onAdd:
           photo, school or surname. On Base they are an anonymous ID.
         </span>
       </label>
-      <button type="submit" disabled={busy || !nickname.trim() || pin.length !== 4 || !consent} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+      <button type="submit" disabled={busy || !nickname.trim() || pin.length !== 4 || !consent} className="btn">
         Add {nickname || "child"}
       </button>
     </form>
@@ -718,40 +715,39 @@ function GiftLinks({
   const kidName = (id: string) => state.kids.find((k) => k.id === id)?.nickname ?? "your child";
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
-      <h2 className="text-lg font-semibold">✈️ Gift links for family abroad</h2>
-      <p className="text-sm text-moon-dim">
-        Share a link on WhatsApp. Pick the company and amount here, or let the relative choose. They add an occasion and a message, then pay in USDC from their
-        own wallet, and the vault turns it into <strong>real shares</strong> for your kid (gifts arrive as shares, not cash). No Allowance account needed. For a{" "}
-        <strong>group gift</strong>, several relatives chip in toward a target.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <select aria-label="For which child" value={kidId} onChange={(e) => setKidId(e.target.value)} className="rounded-lg bg-white p-2 text-ink">
-          {state.kids.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.avatar} {k.nickname}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Gift type" value={kind} onChange={(e) => setKind(e.target.value as "single" | "group")} className="rounded-lg bg-white p-2 text-ink">
-          <option value="single">Gift link</option>
-          <option value="group">Group gift link</option>
-        </select>
-        <select aria-label="Company" value={ticker} onChange={(e) => setTicker(e.target.value as Ticker | "")} className="rounded-lg bg-white p-2 text-ink">
-          {kind === "single" && <option value="">Relative chooses</option>}
-          <option value="AAPL">🍎 Apple</option>
-          <option value="NVDA">🎮 Nvidia</option>
-        </select>
-        <label className="flex items-center gap-1 text-sm">
-          {kind === "group" ? "Target $" : "Amount $"}
+    <>
+      <h1 className="screen-title">Gift links</h1>
+      <section className="card flex flex-col gap-3">
+        <p className="text-sm font-semibold text-moon-dim">
+          Share a link on WhatsApp. Relatives pay in USDC from their own wallet, and the vault turns it into <strong className="text-ink">real shares</strong> for your kid. No
+          Allowance account needed. On a <strong className="text-ink">group gift</strong>, several relatives chip in toward a target.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <select aria-label="For which child" value={kidId} onChange={(e) => setKidId(e.target.value)} className="field">
+            {state.kids.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.avatar} {k.nickname}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Gift type" value={kind} onChange={(e) => setKind(e.target.value as "single" | "group")} className="field">
+            <option value="single">Gift link</option>
+            <option value="group">Group gift link</option>
+          </select>
+          <select aria-label="Company" value={ticker} onChange={(e) => setTicker(e.target.value as Ticker | "")} className="field">
+            {kind === "single" && <option value="">Relative chooses</option>}
+            <option value="AAPL">🍎 Apple</option>
+            <option value="NVDA">🎮 Nvidia</option>
+          </select>
           <input
+            aria-label={kind === "group" ? "Target in US dollars" : "Amount in US dollars"}
             inputMode="decimal"
             value={target}
-            placeholder={kind === "single" ? "they choose" : ""}
+            placeholder={kind === "single" ? "They choose" : "Target $"}
             onChange={(e) => setTarget(e.target.value)}
-            className="w-24 rounded-lg bg-white p-2 text-ink"
+            className="field"
           />
-        </label>
+        </div>
         <button
           type="button"
           disabled={busy || !kidId}
@@ -762,43 +758,50 @@ function GiftLinks({
                 : { kidId, kind, ticker: ticker || undefined, target: target.trim() ? Number(target) : undefined },
             )
           }
-          className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60"
+          className="btn"
         >
           Make link
         </button>
-      </div>
+      </section>
       {state.giftLinks.length > 0 && (
-        <ul className="flex flex-col gap-2 text-sm">
-          {state.giftLinks.map((l) => {
-            const url = `${origin}/gift/${l.code}`;
-            const text = `Send ${kidName(l.kid_id)} a slice of a real company while they sleep 🌙 ${url}`;
-            return (
-              <li key={l.code} className="flex flex-wrap items-center gap-2 rounded-lg bg-night-800 p-2">
-                <span className="flex-1">
-                  {l.kind === "group"
-                    ? `👨🏾‍👩🏾‍👧🏾 Group gift (${l.ticker === "NVDA" ? "Nvidia" : "Apple"}, target ${usd(l.target_micro)})`
-                    : `🎁 ${l.target_micro ? usd(l.target_micro) : "Any amount"} of ${l.ticker === "NVDA" ? "Nvidia" : l.ticker === "AAPL" ? "Apple" : "their choice"}`}{" "}
-                  for{" "}
-                  {kidName(l.kid_id)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(url).then(() => setCopied(l.code));
-                  }}
-                  className="rounded-lg bg-night-700 px-2 py-1"
-                >
-                  {copied === l.code ? "Copied ✓" : "Copy"}
-                </button>
-                <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="rounded-lg bg-[#25D366] px-2 py-1 font-semibold text-night-950">
-                  WhatsApp
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+        <section className="card py-2">
+          <h2 className="section-title pt-2">Your links</h2>
+          <ul>
+            {state.giftLinks.map((l) => {
+              const url = `${origin}/gift/${l.code}`;
+              const text = `Send ${kidName(l.kid_id)} a slice of a real company while they sleep 🌙 ${url}`;
+              return (
+                <li key={l.code} className="row flex-wrap">
+                  <span className="tile" aria-hidden>
+                    {l.kind === "group" ? "👨🏾‍👩🏾‍👧🏾" : "🎁"}
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-extrabold">
+                    {l.kind === "group"
+                      ? `Group gift: ${l.ticker === "NVDA" ? "Nvidia" : "Apple"}, target ${usd(l.target_micro)}`
+                      : `${l.target_micro ? usd(l.target_micro) : "Any amount"} of ${l.ticker === "NVDA" ? "Nvidia" : l.ticker === "AAPL" ? "Apple" : "their choice"}`}
+                    <span className="block font-semibold text-moon-dim">For {kidName(l.kid_id)}</span>
+                  </span>
+                  <span className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(url).then(() => setCopied(l.code));
+                      }}
+                      className="btn btn-sm btn-soft"
+                    >
+                      {copied === l.code ? "Copied ✓" : "Copy"}
+                    </button>
+                    <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="btn btn-sm bg-[#25D366] text-ink">
+                      WhatsApp
+                    </a>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
-    </section>
+    </>
   );
 }
 
@@ -819,61 +822,71 @@ function Devices({
   const pending = state.devices.filter((d) => d.status === "pending");
   const approved = state.devices.filter((d) => d.status === "approved");
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
-      <h2 className="text-lg font-semibold">📱 Kids&apos; devices</h2>
+    <>
+      <h1 className="screen-title">Kids&apos; devices</h1>
       {pending.map((d) => (
-        <div key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-sunrise-100 p-3 text-ink">
-          <span className="flex-1">
+        <div key={d.id} className="stack-lime mt-0 flex flex-col gap-3 pb-5">
+          <span className="font-extrabold">
             {kid(d.kid_id)?.avatar} {kid(d.kid_id)?.nickname}&apos;s {d.label} wants to join. Approve?
           </span>
-          <button type="button" disabled={busy} onClick={() => onSet(d.id, true)} className="rounded-lg bg-night-900 px-3 py-1 font-semibold text-moon disabled:opacity-60">
-            Approve
-          </button>
-          <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="rounded-lg bg-white px-3 py-1 disabled:opacity-60">
-            No
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" disabled={busy} onClick={() => onSet(d.id, true)} className="btn btn-sm">
+              Approve
+            </button>
+            <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="btn btn-sm btn-white">
+              No
+            </button>
+          </div>
         </div>
       ))}
-      {approved.map((d) => (
-        <div key={d.id} className="flex items-center gap-2 text-sm">
-          <span className="flex-1">
-            {kid(d.kid_id)?.avatar} {kid(d.kid_id)?.nickname}&apos;s {d.label}
-            {d.last_seen_at ? ` · last used ${new Date(d.last_seen_at).toLocaleDateString()}` : ""}
-          </span>
-          <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="underline disabled:opacity-60">
-            Remove
-          </button>
-        </div>
-      ))}
-      <p className="text-sm text-moon-dim">
-        On this phone, use &quot;Hand the phone to a kid&quot;. For their own tablet or a school phone, make a family code: they scan the QR code, open the link, or type the
-        6 characters at /join. Codes work once and last 24 hours, and you approve every new device.
-      </p>
-      <div className="flex flex-wrap gap-2">
+      {approved.length > 0 && (
+        <section className="card py-2">
+          {approved.map((d) => (
+            <div key={d.id} className="row">
+              <span className="tile" aria-hidden>
+                {kid(d.kid_id)?.avatar}
+              </span>
+              <span className="min-w-0 flex-1 text-sm font-extrabold">
+                {kid(d.kid_id)?.nickname}&apos;s {d.label}
+                {d.last_seen_at && <span className="block font-semibold text-moon-dim">Last used {new Date(d.last_seen_at).toLocaleDateString()}</span>}
+              </span>
+              <button type="button" disabled={busy} onClick={() => onSet(d.id, false)} className="text-sm font-extrabold underline disabled:opacity-60">
+                Remove
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+      <section className="card flex flex-col gap-3">
+        <h2 className="section-title">Add a device</h2>
+        <p className="text-sm font-semibold text-moon-dim">
+          On this phone, use &quot;Hand to a kid&quot;. For their own tablet or a school phone, make a family code: they scan the QR code, open the link, or type the 6 characters at
+          /join. Codes work once and last 24 hours, and you approve every new device.
+        </p>
         {state.kids
           .filter((k) => !k.graduated_to)
           .map((k) => (
-            <button key={k.id} type="button" disabled={busy} onClick={() => onInvite(k.id)} className="rounded-lg bg-night-700 px-3 py-2 text-sm disabled:opacity-60">
+            <button key={k.id} type="button" disabled={busy} onClick={() => onInvite(k.id)} className="btn btn-soft">
               Family code for {k.avatar} {k.nickname}
             </button>
           ))}
-      </div>
-      {invite && (
-        <div className="flex flex-col items-center gap-2 rounded-xl bg-white p-4 text-ink">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL QR code generated on our server */}
-          <img src={invite.qr} alt={`QR code to join as ${kid(invite.kidId)?.nickname}`} width={200} height={200} />
-          <p className="font-mono text-3xl tracking-[0.3em]">{invite.code}</p>
-          <p className="break-all text-xs">{invite.link}</p>
-          <a
-            href={`https://wa.me/?text=${encodeURIComponent(`Join our family on Allowance: ${invite.link} (code ${invite.code})`)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-[#25D366] px-3 py-1 text-sm font-semibold"
-          >
-            Send on WhatsApp
-          </a>
-        </div>
-      )}
-    </section>
+        {invite && (
+          <div className="flex flex-col items-center gap-2 rounded-3xl bg-night-800 p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL QR code generated on our server */}
+            <img src={invite.qr} alt={`QR code to join as ${kid(invite.kidId)?.nickname}`} width={200} height={200} className="rounded-2xl" />
+            <p className="font-mono text-3xl tracking-[0.3em]">{invite.code}</p>
+            <p className="note break-all text-center">{invite.link}</p>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Join our family on Allowance: ${invite.link} (code ${invite.code})`)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm bg-[#25D366] text-ink"
+            >
+              Send on WhatsApp
+            </a>
+          </div>
+        )}
+      </section>
+    </>
   );
 }

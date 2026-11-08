@@ -64,7 +64,7 @@ export default function JoinApp() {
         <p className="text-moon-dim">Loading…</p>
       ) : s.status === "none" ? (
         <form
-          className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5"
+          className="flex flex-col gap-3 card"
           onSubmit={(e) => {
             e.preventDefault();
             act({ action: "join", code, label });
@@ -83,14 +83,14 @@ export default function JoinApp() {
           </label>
           <label className="flex flex-col gap-1">
             Name this device
-            <input value={label} maxLength={40} placeholder="My tablet" onChange={(e) => setLabel(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
+            <input value={label} maxLength={40} placeholder="My tablet" onChange={(e) => setLabel(e.target.value)} className="field" />
           </label>
-          <button type="submit" disabled={busy || code.length !== 6} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+          <button type="submit" disabled={busy || code.length !== 6} className="btn">
             Ask to join
           </button>
         </form>
       ) : s.status === "pending" ? (
-        <section className="rounded-2xl bg-night-900 p-5">
+        <section className="card">
           <h1 className="text-xl font-bold">Waiting for your parent…</h1>
           <p className="mt-2 text-moon-dim">
             They&apos;ll see “{s.kid?.nickname}&apos;s {s.label} wants to join. Approve?” This page updates by itself.
@@ -98,7 +98,7 @@ export default function JoinApp() {
         </section>
       ) : s.status === "approved" ? (
         <form
-          className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5"
+          className="flex flex-col gap-3 card"
           onSubmit={(e) => {
             e.preventDefault();
             act({ action: "pin", pin }, () => router.push("/kid"));
@@ -117,12 +117,12 @@ export default function JoinApp() {
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
             className="w-32 rounded-xl bg-white p-3 text-center text-2xl tracking-widest text-ink"
           />
-          <button type="submit" disabled={busy || pin.length !== 4} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+          <button type="submit" disabled={busy || pin.length !== 4} className="btn">
             Open Allowance
           </button>
         </form>
       ) : (
-        <p className="rounded-2xl bg-night-900 p-5">Your parent removed this device. Ask them for a new family code.</p>
+        <p className="card">Your parent removed this device. Ask them for a new family code.</p>
       )}
     </main>
   );

@@ -1,31 +1,33 @@
 @import "tailwindcss";
 
 /*
- * Allowance: playful premium fintech.
- * Warm cream canvas, violet for actions, mint for savings, coral and sunny yellow for highlights, deep ink text.
- * The token names are kept from the first "night shift" palette so every screen picks up the new look:
- *   night-950 = page canvas, night-900 = cards, night-800/700 = soft violet panels,
- *   moon = main text, moon-dim = secondary text, star = primary action (violet).
+ * Allowance design system.
+ * Warm cream canvas and deep ink type, with stacked lavender and lime panels in the app.
+ * Token names are kept from the first palette so every screen shares them:
+ *   night-950 = page canvas, night-900 = cards, night-800/700 = soft lavender panels,
+ *   moon = main text, moon-dim = secondary text, star = primary action.
  */
 :root {
-  --night-950: #f8f6f0; /* warm cream canvas */
-  --night-900: #ffffff; /* cards */
-  --night-800: #f1edfd; /* soft violet panel */
-  --night-700: #e3dafb; /* selected / pressed violet */
-  --moon: #25243a; /* deep ink text */
-  --moon-dim: #6b6884; /* secondary text */
-  --star: #7656e8; /* playful violet: primary actions */
-  --mint: #b9e9d0; /* savings */
+  --night-950: #fffbf1;
+  --night-900: #ffffff;
+  --night-800: #f4f0ff;
+  --night-700: #e6deff;
+  --moon: #1a1200;
+  --moon-dim: #746c5c;
+  --star: #1a1200;
+  --mint: #b9e9d0;
   --mint-ink: #1f6b4a;
-  --sunny: #ffd979; /* highlights */
-  --sunrise-50: #fff7f2;
-  --sunrise-100: #ffe6dd; /* peach */
-  --sunrise-300: #ffb9a8; /* peach coral */
-  --sunrise-500: #ff8f73;
-  --sunrise-700: #c24f36;
-  --ink: #25243a;
-  --focus: #7656e8;
-  --shadow: 0 1px 2px rgb(37 36 58 / 0.06), 0 8px 24px -12px rgb(118 86 232 / 0.25);
+  --sunny: #ffc53d;
+  --sunrise-50: #fff8e7;
+  --sunrise-100: #ffefc7;
+  --sunrise-300: #ffd66b;
+  --sunrise-500: #e89a00;
+  --sunrise-700: #8a5a00;
+  --ink: #1a1200;
+  --lavender: #cfc0fb;
+  --lime: #e9f68e;
+  --focus: #6a4be0;
+  --shadow: 0 1px 2px rgb(26 18 0 / 0.04), 0 14px 32px -22px rgb(26 18 0 / 0.3);
 }
 
 @theme inline {
@@ -45,169 +47,309 @@
   --color-sunrise-500: var(--sunrise-500);
   --color-sunrise-700: var(--sunrise-700);
   --color-ink: var(--ink);
+  --color-lavender: var(--lavender);
+  --color-lime: var(--lime);
   --font-sans: var(--font-nunito);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background:
-    radial-gradient(900px 500px at 100% -10%, rgb(118 86 232 / 0.1), transparent 60%),
-    radial-gradient(700px 400px at -10% 10%, rgb(255 185 168 / 0.18), transparent 60%),
-    var(--night-950);
-  background-attachment: fixed;
+  background: var(--night-950);
   color: var(--moon);
   font-family: var(--font-nunito), system-ui, sans-serif;
 }
 
 h1,
-h2 {
+h2,
+h3 {
   letter-spacing: -0.02em;
 }
 
-/* Text on the violet primary buttons */
+/* Text on dark primary buttons */
 .text-night-950 {
   color: #ffffff;
 }
-.bg-star {
-  background: linear-gradient(180deg, #8a6df0, #7656e8);
-  box-shadow: 0 6px 16px -6px rgb(118 86 232 / 0.6);
-}
 
-/* Cards: soft lift and a gentle shadow */
-section.rounded-2xl,
-article.rounded-2xl,
-article.rounded-xl,
-div.rounded-2xl,
-form.rounded-2xl {
-  box-shadow: var(--shadow);
-}
-
-/* Everything floats in as it appears */
-main > *,
-main section > *,
-main article {
-  animation: float-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-main > *:nth-child(2) {
-  animation-delay: 0.04s;
-}
-main > *:nth-child(3) {
-  animation-delay: 0.08s;
-}
-main > *:nth-child(4) {
-  animation-delay: 0.12s;
-}
-main > *:nth-child(5) {
-  animation-delay: 0.16s;
-}
-main > *:nth-child(n + 6) {
-  animation-delay: 0.2s;
-}
-
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
+@layer components {
+  .card {
+    border-radius: 24px;
+    background: #fff;
+    color: var(--ink);
+    padding: 20px;
+    box-shadow: var(--shadow);
   }
-  to {
-    opacity: 1;
-    transform: none;
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 20px;
+    border-radius: 18px;
+    background: var(--ink);
+    color: #fff;
+    font-weight: 800;
+    text-align: center;
+  }
+  .btn-soft {
+    background: var(--night-800);
+    color: var(--ink);
+  }
+  .btn-white {
+    background: #fff;
+    color: var(--ink);
+  }
+  .btn-sm {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+  }
+  .field {
+    width: 100%;
+    min-height: 52px;
+    border-radius: 16px;
+    background: #faf7ef;
+    padding: 0 16px;
+    color: var(--ink);
+    font-weight: 700;
+  }
+  textarea.field {
+    padding: 14px 16px;
+    line-height: 1.4;
+  }
+  .label {
+    font-size: 0.875rem;
+    font-weight: 800;
+  }
+  .eyebrow {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: rgb(26 18 0 / 0.62);
+  }
+  .note {
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--moon-dim);
+  }
+  .stat {
+    font-size: 2.75rem;
+    line-height: 1.05;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .screen-title {
+    font-size: 1.875rem;
+    line-height: 1.1;
+    font-weight: 800;
+  }
+  .section-title {
+    font-size: 1.0625rem;
+    font-weight: 800;
+  }
+
+  /* Three panels that overlap like a stack of cards */
+  .stack-hero,
+  .stack-lime,
+  .stack-sheet {
+    border-radius: 32px;
+    color: var(--ink);
+  }
+  .stack-hero {
+    background: var(--lavender);
+    padding: 24px 24px 56px;
+  }
+  .stack-lime {
+    position: relative;
+    margin-top: -32px;
+    background: var(--lime);
+    padding: 20px 24px 56px;
+  }
+  .stack-sheet {
+    position: relative;
+    margin-top: -32px;
+    background: #fff;
+    padding: 12px 20px 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    width: 100%;
+    text-align: left;
+  }
+  .row + .row {
+    border-top: 1px solid rgb(26 18 0 / 0.07);
+  }
+  .tile {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: var(--night-800);
+    font-size: 1.375rem;
+  }
+  .avatar {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: #fff;
+    font-size: 1.625rem;
+    box-shadow: var(--shadow);
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    background: var(--night-800);
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+  .progress {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgb(26 18 0 / 0.1);
+  }
+  .progress > div {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--ink);
+  }
+
+  /* Settings that open and close */
+  .fold {
+    border-top: 1px solid rgb(26 18 0 / 0.07);
+    padding: 14px 0;
+  }
+  .fold > summary {
+    display: flex;
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 800;
+  }
+  .fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .fold > summary::after {
+    content: "+";
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--moon-dim);
+  }
+  .fold[open] > summary::after {
+    content: "\2212";
+  }
+  .fold-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 12px;
+  }
+
+  .tabbar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+  }
+  .tabbar-inner {
+    display: grid;
+    margin: 0 auto;
+    max-width: 28rem;
+    border-radius: 24px;
+    background: #fff;
+    padding: 6px;
+    color: var(--ink);
+    box-shadow: 0 2px 6px rgb(26 18 0 / 0.08), 0 18px 40px -16px rgb(26 18 0 / 0.4);
+  }
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    border-radius: 18px;
+    padding: 7px 2px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--moon-dim);
+  }
+  .tab[aria-current="page"] {
+    background: var(--night-700);
+    color: var(--ink);
+  }
+  .tab-icon {
+    position: relative;
+    display: grid;
+    height: 26px;
+    place-items: center;
+    font-size: 1.25rem;
+  }
+  .tab-badge {
+    position: absolute;
+    top: -3px;
+    right: -9px;
+    display: grid;
+    min-width: 16px;
+    height: 16px;
+    place-items: center;
+    border-radius: 999px;
+    background: #e5484d;
+    padding: 0 4px;
+    font-size: 0.625rem;
+    color: #fff;
+  }
+
+  /* Landing page stickers: a white outline around an emoji, like a die-cut sticker */
+  .die-cut {
+    filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 8px 12px rgb(26 18 0 / 0.18));
   }
 }
 
-/* Buttons and links feel bouncy */
 button,
-a.rounded-2xl,
-a.rounded-xl,
-a.rounded-lg {
+a {
   transition:
     transform 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease,
-    filter 0.15s ease;
-}
-button:not(:disabled):hover,
-a.rounded-2xl:hover,
-a.rounded-xl:hover,
-a.rounded-lg:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.04);
+    opacity 0.15s ease;
 }
 button:not(:disabled):active {
-  transform: translateY(0) scale(0.97);
-}
-button[aria-pressed="true"] {
-  animation: pop 0.25s ease;
+  transform: scale(0.98);
 }
 
-@keyframes pop {
-  50% {
-    transform: scale(1.06);
-  }
-}
-
-/* Big emoji and avatars wiggle and bob a little */
-.text-5xl[aria-hidden],
-.text-4xl[aria-hidden] {
-  display: inline-block;
-  animation: bob 3.2s ease-in-out infinite;
-  transform-origin: 50% 80%;
-}
-@keyframes bob {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  25% {
-    transform: translateY(-4px) rotate(-4deg);
-  }
-  75% {
-    transform: translateY(-2px) rotate(3deg);
-  }
-}
-
-/* Money numbers count in with a little shine */
-.text-3xl.font-bold {
-  background: linear-gradient(90deg, var(--ink), var(--star), var(--ink));
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shine 4s ease-in-out infinite;
-}
-@keyframes shine {
-  0%,
-  100% {
-    background-position: 0% 0;
-  }
-  50% {
-    background-position: 100% 0;
-  }
-}
-
-/* Progress bars fill smoothly */
 [role="progressbar"] > div {
   transition: width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
-  background: linear-gradient(90deg, var(--mint), #7fd6ad);
 }
 
-/* Inputs: soft, rounded, violet focus */
 input,
 select,
 textarea {
-  border: 1.5px solid #e6e1f5;
+  border: 1.5px solid #ece6d8;
   transition: border-color 0.15s ease;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--star);
+  border-color: var(--focus);
 }
 
 :focus-visible {
   outline: 3px solid var(--focus);
-  outline-offset: 3px;
-  border-radius: 8px;
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -216,14 +358,9 @@ textarea:focus {
   *::after {
     transition-duration: 0.01ms !important;
   }
-  /* Keep the gentle illustration loops, but slow them down; skip the entrance/bounce motion. */
-  main > *,
-  main section > *,
-  main article,
-  button[aria-pressed="true"] {
-    animation: none !important;
-  }
-  .night-scene * {
+  .night-scene *,
+  .float-slow,
+  .sway {
     animation-duration: 12s !important;
   }
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import VoiceRecorder from "@/components/VoiceRecorder";
+import { FeedItem, Icon, TabBar } from "@/components/ui";
 
 type Ticker = "AAPL" | "NVDA";
 type Profile = { id: string; nickname: string; avatar: string };
@@ -86,13 +86,12 @@ export default function KidApp() {
     }
   };
 
-  // Lavender by day; deep violet at bedtime (the night shift).
-  const theme = night ? "bg-[#2B2463] text-white" : "bg-[#EEE9FF] text-ink";
-  const panel = night ? "bg-night-900" : "bg-white";
+  // Cream by day; deep violet at bedtime (the night shift). Cards stay light with dark text in both.
+  const theme = night ? "bg-[#1F1A4D] text-white" : "text-ink";
 
   return (
     <div className={`min-h-full flex-1 ${theme}`}>
-      <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 pb-32 pt-5">
         {!state && (
           <Link href="/parent" className="text-sm font-semibold">
             ← Grown-ups
@@ -104,7 +103,7 @@ export default function KidApp() {
           </p>
         )}
         {busy && (
-          <p aria-live="polite" className={`rounded-xl px-3 py-2 text-sm ${panel}`}>
+          <p aria-live="polite" className="rounded-xl bg-white px-3 py-2 text-sm text-ink">
             ⏳ {busy}
           </p>
         )}
@@ -114,7 +113,6 @@ export default function KidApp() {
           <KidHome
             state={state}
             night={night}
-            panel={panel}
             busy={!!busy}
             onPitch={(p) => run(night ? "Sending your bedtime pitch…" : "Sending your pitch…", async () => setState(await kidApi<KidState>({ action: "pitch", ...p })))}
             onThank={(giftId, text, voice) =>
@@ -137,7 +135,6 @@ export default function KidApp() {
         ) : profiles ? (
           <Switcher
             profiles={profiles}
-            panel={panel}
             busy={!!busy}
             onSwitch={(kidId, pin) => run("Checking your PIN…", async () => setState(await kidApi<KidState>({ action: "switch", kidId, pin })))}
           />
@@ -147,13 +144,13 @@ export default function KidApp() {
   );
 }
 
-function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; panel: string; busy: boolean; onSwitch: (kidId: string, pin: string) => void }) {
+function Switcher({ profiles, busy, onSwitch }: { profiles: Profile[]; busy: boolean; onSwitch: (kidId: string, pin: string) => void }) {
   const [pick, setPick] = useState<Profile | null>(profiles.length === 1 ? profiles[0] : null);
   const [pin, setPin] = useState("");
   if (!profiles.length) return <p>No kids yet. A parent adds them on the grown-ups page.</p>;
   return (
-    <section className={`flex flex-col gap-4 rounded-2xl p-5 ${panel}`}>
-      <h1 className="text-2xl font-bold">Who&apos;s using Allowance?</h1>
+    <section className="card flex flex-col gap-5">
+      <h1 className="screen-title">Who&apos;s using Allowance?</h1>
       <div className="grid grid-cols-3 gap-2">
         {profiles.map((p) => (
           <button
@@ -161,25 +158,25 @@ function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; pa
             type="button"
             aria-pressed={pick?.id === p.id}
             onClick={() => setPick(p)}
-            className={`flex flex-col items-center rounded-2xl p-3 ${pick?.id === p.id ? "ring-2 ring-star" : ""}`}
+            className={`flex flex-col items-center rounded-3xl p-3 ${pick?.id === p.id ? "bg-night-700" : "bg-night-800"}`}
           >
             <span className="text-4xl" aria-hidden>
               {p.avatar}
             </span>
-            <span className="mt-1 font-semibold">{p.nickname}</span>
+            <span className="mt-1 font-extrabold">{p.nickname}</span>
           </button>
         ))}
       </div>
       {pick && (
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             onSwitch(pick.id, pin);
             setPin("");
           }}
         >
-          <label className="sr-only" htmlFor="kid-pin">
+          <label className="label" htmlFor="kid-pin">
             {pick.nickname}&apos;s PIN
           </label>
           <input
@@ -189,10 +186,9 @@ function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; pa
             maxLength={4}
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            placeholder="PIN"
-            className="w-32 rounded-xl bg-white px-3 py-2 text-center text-2xl tracking-widest text-ink"
+            className="field text-center text-2xl tracking-[0.5em]"
           />
-          <button type="submit" disabled={busy || pin.length !== 4} className="rounded-xl bg-star px-4 font-semibold text-night-950 disabled:opacity-60">
+          <button type="submit" disabled={busy || pin.length !== 4} className="btn">
             Switch to {pick.nickname}
           </button>
         </form>
@@ -201,8 +197,6 @@ function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; pa
   );
 }
 
-/* Outlined, chunky cards in the style of the kids' finance references. */
-const CARD = "rounded-3xl bg-white p-4 text-ink shadow-[var(--shadow)]";
 
 function Piggy({ className = "" }: { className?: string }) {
   return (
@@ -274,7 +268,6 @@ function useGoal(kidId: string) {
 function KidHome({
   state,
   night,
-  panel,
   busy,
   onPitch,
   onThank,
@@ -282,7 +275,6 @@ function KidHome({
 }: {
   state: KidState;
   night: boolean;
-  panel: string;
   busy: boolean;
   onPitch: (p: PitchInput) => void;
   onThank: (giftId: number, text: string, voice: Blob | null) => void;
@@ -296,102 +288,109 @@ function KidHome({
   const [goal, setGoal] = useGoal(kid.id);
   const goalPct = goal ? Math.min(100, Math.round((savings / goal.targetMicro) * 100)) : 0;
   const newThings = state.report.gifts.length + state.report.approved.length + state.report.allowances.length;
+  const hasAllowance = !!state.allowance && state.allowance.amountMicro !== "0";
   const go = (t: typeof tab) => {
     setTab(t);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
-    <div className="flex flex-col gap-4 pb-28">
-      {/* Header */}
+    <div className="flex flex-col gap-4">
       <header className="flex items-center gap-3">
-        <span className="grid h-14 w-14 place-items-center rounded-full bg-[#FFE6DD] text-3xl shadow-sm">{kid.avatar}</span>
+        <span className="avatar text-ink">{kid.avatar}</span>
         <div className="flex-1">
-          <p className="text-sm font-semibold opacity-70">{night ? "Good night 🌙" : "Hello ☀️"}</p>
-          <h1 className="text-2xl font-black">{kid.nickname}</h1>
+          <p className="text-sm font-bold opacity-70">{night ? "Good night" : "Hello"}</p>
+          <p className="text-xl font-extrabold leading-tight">{kid.nickname}</p>
         </div>
-        <button type="button" onClick={() => go("report")} aria-label={`Morning Report, ${newThings} new`} className="relative grid h-12 w-12 place-items-center rounded-full bg-white text-xl shadow-sm">
-          🔔
-          {newThings > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-star px-1 text-xs font-black text-white">{newThings}</span>
-          )}
-        </button>
       </header>
 
       {tab === "home" && (
-        <>
-          <section className="flex items-center gap-3 rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white shadow-[var(--shadow)]">
-            <div className="flex-1">
-              <p className="text-sm font-semibold opacity-80">Total savings</p>
-              <p className="mt-1 text-4xl font-extrabold tracking-tight">{state.hasVault ? usd(savings) : "…"}</p>
-              <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold opacity-80">● live from Base</p>
+        <div>
+          <section className="stack-hero">
+            <div className="flex items-start">
+              <div className="flex-1">
+                <p className="eyebrow">Total savings</p>
+                <p className="stat mt-1">{state.hasVault ? usd(savings) : "…"}</p>
+                <p className="eyebrow mt-1">Live from Base</p>
+              </div>
+              <Piggy className="h-20 w-24" />
             </div>
-            <Piggy className="h-24 w-28" />
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => go("invest")} className="btn">
+                Pitch
+              </button>
+              <button type="button" onClick={() => go("report")} className="btn btn-white">
+                My report
+              </button>
+            </div>
           </section>
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => go("invest")} className={`${CARD} flex items-center gap-2 bg-[#FFE6DD] py-3 font-black`}>
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">🚀</span> Pitch
-            </button>
-            <button type="button" onClick={() => go("report")} className={`${CARD} flex items-center gap-2 bg-[#EDE7FF] py-3 font-black`}>
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">☀️</span> Report
-            </button>
-          </div>
-          <button type="button" onClick={() => go("goals")} className={`${CARD} flex items-center gap-3 bg-[#E6F59A] text-left`}>
-            <div className="flex-1">
-              <p className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">🎯</span> Goal progress
-              </p>
-              <p className="mt-2 text-5xl font-black">{goal ? `${goalPct}%` : "Set one!"}</p>
-              {goal && <p className="text-sm font-bold">{goal.emoji} {goal.name}</p>}
-            </div>
-            <Rocket className="h-28 w-24" />
+
+          <button type="button" onClick={() => go("goals")} className="stack-lime block w-full text-left">
+            <span className="flex items-center gap-3">
+              <span className="min-w-0 flex-1">
+                <span className="eyebrow block">{goal ? `Saving for ${goal.name}` : "Goal progress"}</span>
+                <span className="mt-1 block text-3xl font-extrabold tracking-tight">{goal ? `${goalPct}%` : "Set a goal"}</span>
+                {goal && (
+                  <span className="progress mt-2 block">
+                    <span className="block h-full rounded-full bg-ink" style={{ width: `${goalPct}%` }} />
+                  </span>
+                )}
+              </span>
+              <Rocket className="h-16 w-14 flex-none" />
+            </span>
           </button>
-          <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black">Companies I own</h2>
-              <button type="button" onClick={() => go("invest")} className="text-sm font-bold underline">
+
+          <section className="stack-sheet">
+            <div className="row">
+              <h2 className="section-title flex-1">Companies I own</h2>
+              <button type="button" onClick={() => go("invest")} className="text-sm font-extrabold text-moon-dim">
                 Pitch one
               </button>
             </div>
-            {owned.length ? (
-              owned.map((s) => (
-                <div key={s.ticker} className={`${CARD} flex items-center gap-3 py-3`}>
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#DDF5E8] text-xl">{COMPANIES[s.ticker].emoji}</span>
-                  <span className="flex-1 font-black">{COMPANIES[s.ticker].name}</span>
-                  <span className="text-sm font-bold">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
-                </div>
-              ))
-            ) : (
-              <p className={`${CARD} py-3 text-sm font-semibold`}>None yet. Pitch a company and ask your parent!</p>
-            )}
-            <div className={`${CARD} flex items-center gap-3 bg-[#FFF1C9] py-3`}>
-              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-xl shadow-sm">🌙</span>
-              <span className="flex-1 font-black">Allowance</span>
-              <span className="text-sm font-bold">
-                {state.allowance && state.allowance.amountMicro !== "0" ? `${usd(state.allowance.amountMicro)} while you sleep` : "Not set yet"}
+            {owned.map((s) => (
+              <div key={s.ticker} className="row">
+                <span className="tile" aria-hidden>
+                  {COMPANIES[s.ticker].emoji}
+                </span>
+                <span className="flex-1 font-extrabold">{COMPANIES[s.ticker].name}</span>
+                <span className="text-sm font-bold text-moon-dim">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
+              </div>
+            ))}
+            {!owned.length && <p className="row text-sm font-semibold text-moon-dim">None yet. Pitch a company and ask your parent!</p>}
+            <div className="row">
+              <span className="tile" aria-hidden>
+                🌙
               </span>
+              <span className="flex-1 font-extrabold">Allowance</span>
+              <span className="text-sm font-bold text-moon-dim">{hasAllowance ? `${usd(state.allowance!.amountMicro)} while you sleep` : "Not set yet"}</span>
             </div>
           </section>
-        </>
+        </div>
       )}
 
       {tab === "invest" && (
         <>
-          <PitchForm kidName={kid.nickname} band={band} night={false} panel={CARD} busy={busy} maxMicro={Math.min(kid.max_per_pitch_micro, savings)} onPitch={onPitch} />
+          <h1 className="screen-title">Invest</h1>
+          <PitchForm kidName={kid.nickname} band={band} night={night} busy={busy} maxMicro={Math.min(kid.max_per_pitch_micro, savings)} onPitch={onPitch} />
           {state.pitches.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <h2 className="text-lg font-black">My pitches</h2>
+            <section className="card py-2">
+              <h2 className="section-title pt-2">My pitches</h2>
               {state.pitches.map((p) => (
-                <article key={p.id} className={`${CARD} py-3 text-sm`}>
-                  <p className="font-black">
-                    {COMPANIES[p.ticker].emoji} {usd(p.usdc_micro)} of {COMPANIES[p.ticker].name}
-                  </p>
-                  <p className="font-semibold opacity-80">{pitchStatus(p, night)}</p>
-                  {p.txUrl && (
-                    <a href={p.txUrl} target="_blank" rel="noreferrer" className="font-bold underline">
-                      See it on Basescan ↗
-                    </a>
-                  )}
+                <article key={p.id} className="row items-start">
+                  <span className="tile" aria-hidden>
+                    {COMPANIES[p.ticker].emoji}
+                  </span>
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p className="font-extrabold">
+                      {usd(p.usdc_micro)} of {COMPANIES[p.ticker].name}
+                    </p>
+                    <p className="font-semibold text-moon-dim">{pitchStatus(p, night)}</p>
+                    {p.txUrl && (
+                      <a href={p.txUrl} target="_blank" rel="noreferrer" className="font-bold underline">
+                        See it on Basescan ↗
+                      </a>
+                    )}
+                  </div>
                 </article>
               ))}
             </section>
@@ -401,77 +400,68 @@ function KidHome({
 
       {tab === "goals" && (
         <>
-          <h2 className="text-3xl font-black">My Goals</h2>
-          <p className="text-sm font-black uppercase tracking-wide opacity-70">Save today for what you want tomorrow</p>
+          <h1 className="screen-title">My goals</h1>
           {goal ? (
-            <section className={`${CARD} overflow-hidden p-0`}>
-              <div className="flex items-center justify-between bg-[#EDE7FF] p-5">
-                <div>
-                  <p className="text-sm font-bold opacity-70">Savings</p>
-                  <p className="text-4xl font-black">{usd(savings)}</p>
+            <div>
+              <section className="stack-hero flex items-center pb-16">
+                <div className="flex-1">
+                  <p className="eyebrow">Savings</p>
+                  <p className="stat mt-1">{usd(savings)}</p>
+                  <p className="mt-1 font-extrabold">{goal.name}</p>
                 </div>
                 <span className="text-6xl" aria-hidden>
                   {goal.emoji}
                 </span>
-              </div>
-              <div className="p-5">
-                <div className="flex justify-between font-black">
-                  <span>Saved {goalPct}%</span>
-                  <span className="text-sm">
+              </section>
+              <section className="card relative mx-3 -mt-10">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-extrabold">Saved {goalPct}%</span>
+                  <span className="text-sm font-bold text-moon-dim">
                     {usd(savings)} / {usd(goal.targetMicro)}
                   </span>
                 </div>
-                <div className="mt-2 h-4 overflow-hidden rounded-full bg-white/70" role="progressbar" aria-valuenow={goalPct} aria-valuemin={0} aria-valuemax={100} aria-label={goal.name}>
-                  <div className="h-full" style={{ width: `${goalPct}%` }} />
+                <div className="progress mt-3" role="progressbar" aria-valuenow={goalPct} aria-valuemin={0} aria-valuemax={100} aria-label={goal.name}>
+                  <div style={{ width: `${goalPct}%` }} />
                 </div>
-                <p className="mt-3 font-black">
-                  {goal.emoji} {goal.name}
-                </p>
-                <button type="button" onClick={() => setGoal(null)} className="mt-2 text-sm font-bold underline">
+                <button type="button" onClick={() => setGoal(null)} className="mt-4 text-sm font-extrabold underline">
                   Change goal
                 </button>
-              </div>
-            </section>
+              </section>
+            </div>
           ) : (
             <GoalPicker onPick={setGoal} />
           )}
         </>
       )}
 
-      {tab === "report" && (night ? <p className={CARD}>🌙 Your Morning Report is ready after 6am. Sweet dreams!</p> : <MorningReport state={state} busy={busy} onThank={onThank} />)}
+      {tab === "report" &&
+        (night ? (
+          <>
+            <h1 className="screen-title">Morning Report</h1>
+            <p className="card font-bold">🌙 Your Morning Report is ready after 6am. Sweet dreams!</p>
+          </>
+        ) : (
+          <MorningReport state={state} busy={busy} onThank={onThank} />
+        ))}
 
-      <button type="button" onClick={onLeave} className="self-start text-sm font-bold underline">
-        I&apos;m done, give the phone back
-      </button>
-      <p className="text-xs opacity-70">Kids can only ask. Only a grown-up can approve, with Face ID. Learning only, not financial advice.</p>
-      <span className="hidden">{panel}</span>
+      <div className="mt-2 flex flex-col items-center gap-2 text-center">
+        <button type="button" onClick={onLeave} className="text-sm font-extrabold underline">
+          I&apos;m done, give the phone back
+        </button>
+        <p className="max-w-xs text-xs font-semibold opacity-60">Kids can only ask. Only a grown-up can approve, with Face ID. Learning only, not financial advice.</p>
+      </div>
 
-      {/* Bottom tab bar */}
-      {createPortal(
-<nav aria-label="Kid sections" className="fixed inset-x-0 bottom-0 z-40 p-3">
-        <div className="mx-auto grid max-w-xl grid-cols-4 rounded-3xl border border-[#EDE7FF] bg-white/90 p-1.5 text-ink shadow-[var(--shadow)] backdrop-blur">
-          {(
-            [
-              ["home", "🏠", "Home"],
-              ["invest", "🚀", "Invest"],
-              ["goals", "🎯", "Goals"],
-              ["report", "☀️", "Report"],
-            ] as const
-          ).map(([id, icon, label]) => (
-            <button
-              key={id}
-              type="button"
-              aria-current={tab === id ? "page" : undefined}
-              onClick={() => go(id)}
-              className={`flex flex-col items-center rounded-2xl py-1.5 text-xs font-black ${tab === id ? "bg-[#EDE7FF]" : ""}`}
-            >
-              <span className="text-xl">{icon}</span>
-              {label}
-            </button>
-          ))}
-        </div>
-      </nav>,
- document.body)}
+      <TabBar
+        label="Kid sections"
+        active={tab}
+        onPick={go}
+        items={[
+          { id: "home", label: "Home", icon: <Icon name="home" /> },
+          { id: "invest", label: "Invest", icon: <Icon name="chart" /> },
+          { id: "goals", label: "Goals", icon: <Icon name="target" /> },
+          { id: "report", label: "Report", icon: <Icon name="sun" />, badge: newThings },
+        ]}
+      />
     </div>
   );
 }
@@ -480,8 +470,8 @@ function GoalPicker({ onPick }: { onPick: (g: Goal) => void }) {
   const [pick, setPick] = useState(GOAL_IDEAS[0]);
   const [target, setTarget] = useState("20");
   return (
-    <section className={`${CARD} flex flex-col gap-3`}>
-      <p className="font-black">What are you saving for?</p>
+    <section className="card flex flex-col gap-4">
+      <p className="section-title">What are you saving for?</p>
       <div className="grid grid-cols-2 gap-2">
         {GOAL_IDEAS.map((g) => (
           <button
@@ -489,24 +479,21 @@ function GoalPicker({ onPick }: { onPick: (g: Goal) => void }) {
             type="button"
             aria-pressed={pick.name === g.name}
             onClick={() => setPick(g)}
-            className={`rounded-2xl p-3 text-left font-black shadow-sm ${pick.name === g.name ? "bg-[#E6F59A]" : "bg-white"}`}
+            className={`rounded-3xl p-4 text-left font-extrabold ${pick.name === g.name ? "bg-lime" : "bg-night-800"}`}
           >
-            <span className="text-3xl">{g.emoji}</span>
-            <span className="block text-sm">{g.name}</span>
+            <span className="text-3xl" aria-hidden>
+              {g.emoji}
+            </span>
+            <span className="mt-1 block text-sm">{g.name}</span>
           </button>
         ))}
       </div>
-      <label className="flex items-center gap-2 font-bold">
-        It costs $
-        <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="w-24 rounded-xl p-2" />
+      <label className="flex flex-col gap-1.5">
+        <span className="label">How much does it cost? ($)</span>
+        <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="field" />
       </label>
-      <button
-        type="button"
-        disabled={!(Number(target) > 0)}
-        onClick={() => onPick({ ...pick, targetMicro: Math.round(Number(target) * 1e6) })}
-        className="rounded-2xl bg-star py-3 font-black text-white disabled:opacity-60"
-      >
-        Start saving ↗
+      <button type="button" disabled={!(Number(target) > 0)} onClick={() => onPick({ ...pick, targetMicro: Math.round(Number(target) * 1e6) })} className="btn">
+        Start saving
       </button>
     </section>
   );
@@ -531,7 +518,6 @@ function PitchForm({
   kidName,
   band,
   night,
-  panel,
   busy,
   maxMicro,
   onPitch,
@@ -539,7 +525,6 @@ function PitchForm({
   kidName: string;
   band: string;
   night: boolean;
-  panel: string;
   busy: boolean;
   maxMicro: number;
   onPitch: (p: PitchInput) => void;
@@ -551,7 +536,6 @@ function PitchForm({
   const [coach, setCoach] = useState<{ question: string; source: string } | null>(null);
   const [answer, setAnswer] = useState("");
   const card = pick ? cards[pick] : undefined;
-  const sub = night ? "bg-night-800" : "bg-sunrise-50";
 
   useEffect(() => {
     if (!pick || cards[pick]) return;
@@ -567,12 +551,12 @@ function PitchForm({
     setCoach({ question: j.question ?? `What could go wrong for ${COMPANIES[pick!].name}?`, source: j.source ?? "fallback" });
   };
 
-  if (maxMicro < 10_000) return <p className={`rounded-2xl p-4 ${panel}`}>When your allowance lands, you can pitch a company to your parent here.</p>;
+  if (maxMicro < 10_000) return <p className="card font-bold">When your allowance lands, you can pitch a company to your parent here.</p>;
 
   const amountMicro = Number(amount) * 1e6;
   return (
-    <section className={`flex flex-col gap-3 rounded-2xl p-4 ${panel}`}>
-      <h2 className="text-lg font-semibold">{night ? "🌙 Bedtime pitch" : "Pitch a company"}</h2>
+    <section className="card flex flex-col gap-4">
+      <h2 className="section-title">{night ? "🌙 Bedtime pitch" : "Pick a company"}</h2>
       <div className="grid grid-cols-2 gap-2">
         {(Object.keys(COMPANIES) as Ticker[]).map((t) => (
           <button
@@ -584,62 +568,61 @@ function PitchForm({
               setCoach(null);
               setAnswer("");
             }}
-            className={`rounded-xl p-3 ${pick === t ? "ring-2 ring-star" : ""} ${night ? "bg-night-800" : "bg-sunrise-100"}`}
+            className={`flex items-center gap-2 rounded-3xl p-4 font-extrabold ${pick === t ? "bg-lime" : "bg-night-800"}`}
           >
-            {COMPANIES[t].emoji} {COMPANIES[t].name}
+            <span className="text-2xl" aria-hidden>
+              {COMPANIES[t].emoji}
+            </span>
+            {COMPANIES[t].name}
           </button>
         ))}
       </div>
       {pick && card && (
-        <dl className={`space-y-1 rounded-xl p-3 text-sm ${sub}`}>
-          <dt className="font-semibold">What it does</dt>
-          <dd>{card.whatItDoes}</dd>
-          <dt className="font-semibold">How it makes money</dt>
-          <dd>{card.howItMakesMoney}</dd>
-          <dt className="font-semibold">One thing to watch</dt>
-          <dd>{card.oneThingToWatch}</dd>
-          <p className="pt-1 text-xs opacity-70">
-            {card.source === "ai" ? "Written live by Claude (AI)" : "Written with Claude (AI) while building Allowance,"} for ages {band.replace("-", "–")}. Learning only,
-            not financial advice.
+        <dl className="flex flex-col gap-1 rounded-3xl bg-night-800 p-4 text-sm">
+          <dt className="font-extrabold">What it does</dt>
+          <dd className="mb-2">{card.whatItDoes}</dd>
+          <dt className="font-extrabold">How it makes money</dt>
+          <dd className="mb-2">{card.howItMakesMoney}</dd>
+          <dt className="font-extrabold">One thing to watch</dt>
+          <dd className="mb-2">{card.oneThingToWatch}</dd>
+          <p className="note">
+            {card.source === "ai" ? "Written live by Claude (AI)" : "Written with Claude (AI) while building Allowance,"} for ages {band.replace("-", "–")}. Learning only, not
+            financial advice.
           </p>
         </dl>
       )}
       {pick && (
         <form
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (!coach) void askCoach();
             else onPitch({ ticker: pick, why, amount: Number(amount), coachQ: coach.question, coachA: answer });
           }}
         >
-          <label htmlFor="why" className="font-semibold">
+          <label htmlFor="why" className="label">
             Why do you like {COMPANIES[pick].name}?
           </label>
-          <textarea id="why" rows={3} maxLength={280} value={why} readOnly={!!coach} onChange={(e) => setWhy(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
-          <label className="flex items-center gap-2">
-            How much? $
-            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-24 rounded-lg bg-white p-2 text-ink" />
-            <span className="text-xs opacity-70">up to {usd(maxMicro)}</span>
+          <textarea id="why" rows={3} maxLength={280} value={why} readOnly={!!coach} onChange={(e) => setWhy(e.target.value)} className="field" />
+          <label className="flex flex-col gap-1.5">
+            <span className="label">How much? ($)</span>
+            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="field" />
+            <span className="note">Up to {usd(maxMicro)}</span>
           </label>
           {coach && (
-            <div className={`flex flex-col gap-2 rounded-xl p-3 ${sub}`}>
-              <p className="text-xs font-semibold uppercase tracking-wide">🧑‍🏫 Pitch coach</p>
-              <p className="font-semibold">{coach.question}</p>
-              <textarea aria-label="Your answer to the coach" rows={2} maxLength={280} value={answer} onChange={(e) => setAnswer(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
-              <p className="text-xs opacity-70">
+            <div className="flex flex-col gap-2 rounded-3xl bg-night-800 p-4">
+              <p className="eyebrow">🧑‍🏫 Pitch coach</p>
+              <p className="font-extrabold">{coach.question}</p>
+              <textarea aria-label="Your answer to the coach" rows={2} maxLength={280} value={answer} onChange={(e) => setAnswer(e.target.value)} className="field" />
+              <p className="note">
                 {coach.source === "ai" ? "Asked live by Claude (AI)." : "Question written with Claude (AI) while building Allowance."} The coach never says what to buy.
               </p>
             </div>
           )}
-          <button
-            type="submit"
-            disabled={busy || !why.trim() || (!!coach && !answer.trim()) || !(amountMicro > 0) || amountMicro > maxMicro}
-            className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60"
-          >
+          <button type="submit" disabled={busy || !why.trim() || (!!coach && !answer.trim()) || !(amountMicro > 0) || amountMicro > maxMicro} className="btn">
             {!coach ? "Next: one question from the coach" : `Send to my parent${night ? " (they'll see it at breakfast)" : ""}`}
           </button>
-          <p className="text-xs opacity-70">{kidName}, you can only ask. Your parent decides.</p>
+          <p className="note text-center">{kidName}, you can only ask. Your parent decides.</p>
         </form>
       )}
     </section>
@@ -656,30 +639,32 @@ function MorningReport({ state, busy, onThank }: { state: KidState; busy: boolea
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="rounded-2xl bg-gradient-to-b from-sunrise-300 to-sunrise-100 p-5 text-ink">
-        <h2 className="text-2xl font-bold">Your Morning Report</h2>
-        <p className="text-sm">What arrived in the last 24 hours, straight from Base.</p>
+      <div className="stack-hero pb-6">
+        <p className="eyebrow">What arrived in the last 24 hours, straight from Base</p>
+        <h1 className="screen-title mt-1">Your Morning Report</h1>
       </div>
-      {empty && <p className="rounded-2xl bg-white p-4">A quiet night. Check back tomorrow morning!</p>}
+      {empty && <p className="card font-bold">A quiet night. Check back tomorrow morning!</p>}
       {r.gifts.map((g) => (
-        <article key={g.id} className="rounded-2xl bg-white p-4 text-ink">
-          <p className="text-lg font-semibold">
-            🎁{" "}
-            {g.kind === "group_settled"
+        <FeedItem
+          key={g.id}
+          icon="🎁"
+          title={
+            g.kind === "group_settled"
               ? `Your family chipped in together for ${usd(g.usdcMicro)} of ${g.ticker ? COMPANIES[g.ticker].name : "shares"}!`
-              : `${g.gifterName ?? "Someone in your family"} sent you a slice of ${g.ticker ? COMPANIES[g.ticker].name : "a company"} while you slept.`}
-          </p>
+              : `${g.gifterName ?? "Someone in your family"} sent you a slice of ${g.ticker ? COMPANIES[g.ticker].name : "a company"} while you slept.`
+          }
+        >
           {(g.occasion || g.message) && (
-            <p className="text-sm opacity-80">
+            <p className="mt-1 text-sm font-semibold text-moon-dim">
               {g.occasion}
               {g.message ? `: “${g.message}”` : ""}
             </p>
           )}
-          <a href={g.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+          <a href={g.txUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-bold underline">
             See it on Basescan ↗
           </a>
           {g.thanked ? (
-            <p className="mt-2 text-sm">💌 Thank-you sent. They&apos;ll see it when they open their gift link.</p>
+            <p className="mt-2 text-sm font-semibold">💌 Thank-you sent. They&apos;ll see it when they open their gift link.</p>
           ) : (
             <form
               className="mt-3 flex flex-col gap-2"
@@ -688,7 +673,7 @@ function MorningReport({ state, busy, onThank }: { state: KidState; busy: boolea
                 onThank(g.id, texts[g.id] ?? "", voices[g.id] ?? null);
               }}
             >
-              <label htmlFor={`ty-${g.id}`} className="text-sm font-semibold">
+              <label htmlFor={`ty-${g.id}`} className="label">
                 Say thank you
               </label>
               <input
@@ -697,72 +682,66 @@ function MorningReport({ state, busy, onThank }: { state: KidState; busy: boolea
                 value={texts[g.id] ?? ""}
                 placeholder="Thank you so much! 🧡"
                 onChange={(e) => setTexts((t) => ({ ...t, [g.id]: e.target.value }))}
-                className="rounded-xl border border-sunrise-300 p-3"
+                className="field"
               />
               <VoiceRecorder onChange={(b) => setVoices((v) => ({ ...v, [g.id]: b }))} />
-              <button
-                type="submit"
-                disabled={busy || (!(texts[g.id] ?? "").trim() && !voices[g.id])}
-                className="rounded-xl bg-sunrise-500 px-4 py-3 font-semibold text-white disabled:opacity-60"
-              >
-                💌 Send thank-you
+              <button type="submit" disabled={busy || (!(texts[g.id] ?? "").trim() && !voices[g.id])} className="btn">
+                Send thank-you
               </button>
             </form>
           )}
-        </article>
+        </FeedItem>
       ))}
       {r.approved.map((p) => {
         const change = scoreOf(p.id);
         return (
-          <article key={p.id} className="rounded-2xl bg-white p-4 text-ink">
-            <p className="text-lg font-semibold">✅ Your {COMPANIES[p.ticker].name} pitch was approved! You own a piece of it.</p>
+          <FeedItem key={p.id} icon="✅" title={`Your ${COMPANIES[p.ticker].name} pitch was approved! You own a piece of it.`}>
             {p.matchPct > 0 && (
-              <p className="text-sm font-semibold text-sunrise-700">
-                💛 Matched {p.matchPct}%: +{usd(p.matchMicro)} on top of your {usd(p.usdcMicro)}.
+              <p className="mt-1 text-sm font-bold text-sunrise-700">
+                Matched {p.matchPct}%: +{usd(p.matchMicro)} on top of your {usd(p.usdcMicro)}.
               </p>
             )}
             {change !== null && (
-              <p className="text-sm">
-                📈 Since you picked it: {Math.abs(change) < 0.05 ? "about the same" : `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(2)}%`}.{" "}
-                <span className="opacity-70">(Live price on Base. Prices go up and down.)</span>
+              <p className="mt-1 text-sm font-semibold">
+                Since you picked it: {Math.abs(change) < 0.05 ? "about the same" : `${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(2)}%`}.{" "}
+                <span className="text-moon-dim">(Live price on Base. Prices go up and down.)</span>
               </p>
             )}
             {p.txUrl && (
-              <a href={p.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+              <a href={p.txUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-bold underline">
                 See it on Basescan ↗
               </a>
             )}
-          </article>
+          </FeedItem>
         );
       })}
       {r.allowances.map((a, i) => (
-        <article key={i} className="rounded-2xl bg-white p-4 text-ink">
-          <p className="text-lg font-semibold">🌙 Your allowance landed at midnight: {usd(a.usdcMicro)}</p>
+        <FeedItem key={i} icon="🌙" title={`Your allowance landed at midnight: ${usd(a.usdcMicro)}`}>
           {a.txUrl && (
-            <a href={a.txUrl} target="_blank" rel="noreferrer" className="text-sm underline">
+            <a href={a.txUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-bold underline">
               See it on Basescan ↗
             </a>
           )}
-        </article>
+        </FeedItem>
       ))}
       {r.dividends.map((d) => (
-        <article key={d.ticker} className="rounded-2xl bg-white p-4 text-ink">
-          <p className="text-lg font-semibold">💸 {COMPANIES[d.ticker].name} paid you overnight! Your shares grew.</p>
-        </article>
+        <FeedItem key={d.ticker} icon="💸" title={`${COMPANIES[d.ticker].name} paid you overnight! Your shares grew.`} />
       ))}
       {r.leaderboard.length > 1 && (
-        <section className="rounded-2xl bg-white p-4 text-ink" aria-labelledby="lb">
-          <h3 id="lb" className="font-semibold">
-            🏆 Family leaderboard
-          </h3>
-          <p className="text-xs opacity-70">Points for pitches (1), approvals (2) and thank-yous (1). Never for money made.</p>
-          <ol className="mt-2 flex flex-col gap-1">
+        <section className="card" aria-labelledby="lb">
+          <h2 id="lb" className="section-title">
+            Family leaderboard
+          </h2>
+          <p className="note">Points for pitches (1), approvals (2) and thank-yous (1). Never for money made.</p>
+          <ol className="mt-2 flex flex-col">
             {r.leaderboard.map((l, i) => (
-              <li key={l.nickname} className={`flex justify-between rounded-lg px-2 py-1 ${l.me ? "bg-sunrise-100 font-semibold" : ""}`}>
-                <span>
-                  {i + 1}. {l.avatar} {l.nickname}
+              <li key={l.nickname} className="row">
+                <span className="w-4 font-extrabold text-moon-dim">{i + 1}</span>
+                <span className="tile" aria-hidden>
+                  {l.avatar}
                 </span>
-                <span className="text-sm">{l.points} pts</span>
+                <span className={`flex-1 ${l.me ? "font-extrabold" : "font-bold"}`}>{l.nickname}</span>
+                <span className="text-sm font-bold">{l.points} pts</span>
               </li>
             ))}
           </ol>
@@ -776,9 +755,9 @@ function MorningReport({ state, busy, onThank }: { state: KidState; busy: boolea
               .then(setSaved)
               .catch(() => setSaved("Couldn't make the image on this device."))
           }
-          className="rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon"
+          className="btn btn-white shadow"
         >
-          📸 Save my Morning Report as an image
+          Save my Morning Report as an image
         </button>
       )}
       {saved && <p className="text-center text-sm">{saved}</p>}

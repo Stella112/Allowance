@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import VoiceRecorder from "@/components/VoiceRecorder";
+import { TabBar } from "@/components/ui";
 
 // ------------------------------------------------------------------ types (mirror the API)
 
@@ -156,24 +157,21 @@ export default function DemoApp() {
   const queuedGift = state.events.find((e) => e.kind === "gift" && e.status === "queued");
 
   return (
-    <div className={`min-h-full flex-1 transition-colors duration-700 ${morning ? "bg-sunrise-50 text-ink" : "bg-night-950 text-moon"}`}>
+    <div className="min-h-full flex-1">
       {nightShift && <NightShift />}
-      <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 pb-24 pt-5">
+      <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 pb-32 pt-5">
         <header className="flex items-center justify-between gap-2">
-          <Link href="/" className="text-sm font-semibold">
+          <Link href="/" className="text-sm font-extrabold text-moon-dim">
             ← Allowance
           </Link>
-          <p className={`text-sm ${morning ? "text-sunrise-700" : "text-moon-dim"}`}>
+          <p className="pill bg-white shadow-sm">
             Lagos · {clock(state.session.virtualNow, 1)} {morning ? "☀️" : "🌙"}
           </p>
         </header>
-        <p className={`rounded-xl px-3 py-2 text-xs ${morning ? "bg-sunrise-100" : "bg-night-900 text-moon-dim"}`}>
-          Demo family, real Base transactions, tiny amounts paid by Allowance.
-        </p>
 
         <StepGuide state={state} role={role} onGo={(r) => setRole(r)} onSkip={skip} busy={!!busy} />
 
-        <RoleSwitcher role={role} morning={morning} onPick={(r) => setRole(r)} />
+        <RoleSwitcher role={role} onPick={(r) => setRole(r)} />
 
         {error && (
           <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
@@ -181,7 +179,7 @@ export default function DemoApp() {
           </p>
         )}
         {busy && !nightShift && (
-          <p aria-live="polite" className={`rounded-xl px-3 py-2 text-sm ${morning ? "bg-sunrise-100" : "bg-night-800"}`}>
+          <p aria-live="polite" className="rounded-xl bg-night-800 px-3 py-2 text-sm font-semibold">
             ⏳ {busy}
           </p>
         )}
@@ -207,7 +205,7 @@ export default function DemoApp() {
               <KidNight state={state} busy={!!busy} onPitch={(p) => run("Sending your pitch to Mum…", () => api("pitch", p))} />
             )
           ) : (
-            <PinPad morning={morning} onUnlock={() => setKidUnlocked(true)} />
+            <PinPad onUnlock={() => setKidUnlocked(true)} />
           ))}
         {role === "parent" && (
           <ParentView
@@ -228,21 +226,17 @@ export default function DemoApp() {
           />
         )}
 
-        <div className="mt-2 flex flex-col gap-2">
+        <div className="mt-1 flex flex-col items-center gap-3">
           {!morning && (
-            <button
-              type="button"
-              onClick={skip}
-              disabled={!!busy}
-              className="rounded-2xl bg-star px-6 py-4 text-lg font-semibold text-night-950 hover:bg-sunrise-300 disabled:opacity-60"
-            >
-              🌅 Skip to morning{queuedGift ? " (1 gift waiting)" : ""}
+            <button type="button" onClick={skip} disabled={!!busy} className="btn w-full">
+              Skip to morning{queuedGift ? " (1 gift waiting)" : ""}
             </button>
           )}
-          {!morning && !queuedGift && <p className="text-center text-sm text-moon-dim">Tip: send Aunty Funmi&apos;s gift first, so Tobi wakes up to it.</p>}
-          <button type="button" onClick={start} disabled={!!busy} className="text-sm underline disabled:opacity-60">
+          {!morning && !queuedGift && <p className="note text-center">Tip: send Aunty Funmi&apos;s gift first, so Tobi wakes up to it.</p>}
+          <button type="button" onClick={start} disabled={!!busy} className="text-sm font-extrabold text-moon-dim underline disabled:opacity-60">
             Reset demo
           </button>
+          <p className="note text-center">Demo family, real Base transactions, tiny amounts paid by Allowance.</p>
         </div>
       </main>
     </div>
@@ -270,46 +264,59 @@ function StepGuide({ state, role, onGo, onSkip, busy }: { state: State; role: Ro
   ];
   // Night steps can't be done after morning; skip them when choosing what's next.
   const next = steps.findIndex((s, i) => !s.done && !(morning && i < 3));
+  const current = next >= 0 ? steps[next] : null;
+  const doneCount = steps.filter((s) => s.done).length;
   return (
-    <ol aria-label="Demo steps" className={`flex flex-col gap-1 rounded-2xl p-3 text-sm ${morning ? "bg-white" : "bg-night-900"}`}>
-      {steps.map((s, i) => {
-        const missed = morning && i < 2 && !s.done;
-        const isNext = i === next;
-        return (
-          <li key={s.label} className={`flex items-center justify-between gap-2 rounded-xl px-2 py-1 ${isNext ? (morning ? "bg-sunrise-100" : "bg-night-700") : ""}`}>
-            <span className={s.done ? "line-through opacity-60" : missed ? "opacity-50" : ""}>
-              {s.done ? "✅" : i < 3 ? "🌙" : "☀️"} {i + 1}. {s.label}
-              {missed ? " (missed — Reset demo to try)" : ""}
-            </span>
-            {isNext && s.role && s.role !== role && (
-              <button type="button" onClick={() => onGo(s.role!)} className="shrink-0 rounded-lg bg-star px-3 py-1 font-semibold text-night-950">
-                Go to {s.who}
-              </button>
-            )}
-            {isNext && !s.role && (
-              <button type="button" disabled={busy} onClick={onSkip} className="shrink-0 rounded-lg bg-star px-3 py-1 font-semibold text-night-950 disabled:opacity-60">
-                Skip
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ol>
+    <section className="stack-lime mt-0 pb-4" aria-label="Demo steps">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow">{current ? `Step ${next + 1} of ${steps.length}` : "All done"}</p>
+          <p className="font-extrabold leading-snug">{current ? current.label : "You've lived a full night shift."}</p>
+        </div>
+        {current?.role && current.role !== role && (
+          <button type="button" onClick={() => onGo(current.role!)} className="btn btn-sm flex-none">
+            Go to {current.who}
+          </button>
+        )}
+        {current && !current.role && (
+          <button type="button" disabled={busy} onClick={onSkip} className="btn btn-sm flex-none">
+            Skip
+          </button>
+        )}
+      </div>
+      <div className="progress mt-3" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={steps.length} aria-label="Demo progress">
+        <div style={{ width: `${(doneCount / steps.length) * 100}%` }} />
+      </div>
+      <details className="mt-2 text-sm">
+        <summary className="cursor-pointer font-extrabold">All steps</summary>
+        <ol className="mt-2 flex flex-col gap-1 font-semibold">
+          {steps.map((s, i) => {
+            const missed = morning && i < 2 && !s.done;
+            return (
+              <li key={s.label} className={s.done ? "line-through opacity-60" : missed ? "opacity-50" : ""}>
+                {s.done ? "✅" : i < 3 ? "🌙" : "☀️"} {i + 1}. {s.label}
+                {missed ? " (missed: Reset demo to try)" : ""}
+              </li>
+            );
+          })}
+        </ol>
+      </details>
+    </section>
   );
 }
 
 function Welcome({ onStart, busy, error }: { onStart: () => void; busy: string | null; error: string | null }) {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-5 px-4 py-10">
-      <p className="text-5xl" aria-hidden>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 px-4 py-10">
+      <p className="die-cut text-6xl" aria-hidden>
         🌙
       </p>
-      <h1 className="text-3xl font-bold">Meet the Adeyemi family</h1>
-      <p className="text-moon-dim">
+      <h1 className="screen-title">Meet the Adeyemi family</h1>
+      <p className="font-semibold text-moon-dim">
         Tobi (11) lives in Lagos. Mum approves his pitches. Aunty Funmi lives in London. In about 2 minutes you&apos;ll play all three and watch a night shift
         happen with real transactions on Base.
       </p>
-      <ol className="list-decimal space-y-1 pl-5 text-moon-dim">
+      <ol className="card list-inside list-decimal space-y-2 text-sm font-semibold">
         <li>As Tobi, pitch a company to Mum and answer the coach&apos;s question.</li>
         <li>As Aunty Funmi, send a gift while Tobi sleeps.</li>
         <li>Skip to morning. The night shift delivers the gift and the allowance.</li>
@@ -321,53 +328,36 @@ function Welcome({ onStart, busy, error }: { onStart: () => void; busy: string |
           {error}
         </p>
       )}
-      <button type="button" onClick={onStart} disabled={!!busy} className="rounded-2xl bg-star px-6 py-4 text-lg font-semibold text-night-950 disabled:opacity-60">
+      <button type="button" onClick={onStart} disabled={!!busy} className="btn">
         {busy ?? "Start the demo"}
       </button>
-      <p className="text-xs text-moon-dim">Demo family, real Base transactions, tiny amounts (a few cents) paid by Allowance. No wallet or sign-up needed.</p>
+      <p className="note text-center">Demo family, real Base transactions, tiny amounts (a few cents) paid by Allowance. No wallet or sign-up needed.</p>
     </main>
   );
 }
 
-function RoleSwitcher({ role, morning, onPick }: { role: Role; morning: boolean; onPick: (r: Role) => void }) {
-  const roles: { id: Role; name: string; face: string; sub: string }[] = [
-    { id: "kid", name: "Tobi", face: "👦🏾", sub: "11, Lagos" },
-    { id: "parent", name: "Mum", face: "👩🏾", sub: "Lagos" },
-    { id: "relative", name: "Aunty Funmi", face: "👩🏾‍🦱", sub: "London" },
-  ];
+function RoleSwitcher({ role, onPick }: { role: Role; onPick: (r: Role) => void }) {
   return (
-    <nav aria-label="Switch person" className="grid grid-cols-3 gap-2">
-      {roles.map((r) => {
-        const active = r.id === role;
-        return (
-          <button
-            key={r.id}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onPick(r.id)}
-            className={`flex flex-col items-center rounded-2xl p-3 ${
-              active ? (morning ? "bg-sunrise-300 text-ink" : "bg-night-700") : morning ? "bg-sunrise-100" : "bg-night-900"
-            }`}
-          >
-            <span className="text-3xl" aria-hidden>
-              {r.face}
-            </span>
-            <span className="mt-1 text-sm font-semibold">{r.name}</span>
-            <span className="text-xs opacity-70">{r.sub}</span>
-          </button>
-        );
-      })}
-    </nav>
+    <TabBar
+      label="Switch person"
+      active={role}
+      onPick={onPick}
+      items={[
+        { id: "kid", label: "Tobi, 11", icon: "👦🏾" },
+        { id: "parent", label: "Mum", icon: "👩🏾" },
+        { id: "relative", label: "Aunty Funmi", icon: "👩🏾‍🦱" },
+      ]}
+    />
   );
 }
 
-function PinPad({ morning, onUnlock }: { morning: boolean; onUnlock: () => void }) {
+function PinPad({ onUnlock }: { onUnlock: () => void }) {
   const [pin, setPin] = useState("");
   const [wrong, setWrong] = useState(false);
   return (
-    <section className={`rounded-2xl p-5 ${morning ? "bg-sunrise-100" : "bg-night-900"}`}>
-      <h2 className="text-lg font-semibold">Switch to Tobi</h2>
-      <p className="text-sm opacity-80">Demo PIN: 1234</p>
+    <section className="card">
+      <h2 className="section-title">Switch to Tobi</h2>
+      <p className="text-sm font-semibold text-moon-dim">Demo PIN: 1234</p>
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
@@ -389,9 +379,9 @@ function PinPad({ morning, onUnlock }: { morning: boolean; onUnlock: () => void 
             setPin(e.target.value.replace(/\D/g, ""));
             setWrong(false);
           }}
-          className="w-32 rounded-xl border border-night-700 bg-white px-3 py-2 text-center text-2xl tracking-widest text-ink"
+          className="field flex-1 text-center text-2xl tracking-[0.5em]"
         />
-        <button type="submit" className="rounded-xl bg-star px-4 font-semibold text-night-950">
+        <button type="submit" className="btn">
           Go
         </button>
       </form>
@@ -444,16 +434,16 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
     <section className="flex flex-col gap-4">
       <Savings state={state} />
       {pitch ? (
-        <div className="rounded-2xl bg-night-900 p-5">
-          <p className="text-lg font-semibold">
+        <div className="card">
+          <p className="font-extrabold leading-snug">
             {pitch.status === "pending" ? "🌙 Pitch sent! Mum will see this in the morning." : pitch.status === "confirmed" ? `🎉 Mum said yes! You own a piece of ${COMPANIES[pitch.ticker!].name}.` : "Your pitch is being handled…"}
           </p>
           <p className="mt-2 text-moon-dim">“{pitch.why}”</p>
           {pitch.txUrl && <TxLink href={pitch.txUrl} />}
         </div>
       ) : (
-        <div className="rounded-2xl bg-night-900 p-5">
-          <h2 className="text-lg font-semibold">Pitch a company to Mum</h2>
+        <div className="card">
+          <h2 className="section-title">Pitch a company to Mum</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {(Object.keys(COMPANIES) as Ticker[]).map((t) => (
               <button
@@ -465,7 +455,7 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                   setCoach(null);
                   setAnswer("");
                 }}
-                className={`rounded-xl p-4 text-left ${pick === t ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}
+                className={`rounded-3xl p-4 text-left font-extrabold ${pick === t ? "bg-lime" : "bg-night-800"}`}
               >
                 <span className="text-2xl" aria-hidden>
                   {COMPANIES[t].emoji}
@@ -494,15 +484,15 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
               {card ? (
                 <dl className="space-y-2">
                   <div>
-                    <dt className="font-semibold text-star">What it does</dt>
+                    <dt className="font-extrabold">What it does</dt>
                     <dd>{card.whatItDoes}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-star">How it makes money</dt>
+                    <dt className="font-extrabold">How it makes money</dt>
                     <dd>{card.howItMakesMoney}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-star">One thing to watch</dt>
+                    <dt className="font-extrabold">One thing to watch</dt>
                     <dd>{card.oneThingToWatch}</dd>
                   </div>
                   <p className="pt-1 text-xs text-moon-dim">
@@ -535,7 +525,7 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                 readOnly={!!coach}
                 onChange={(e) => setWhy(e.target.value)}
                 placeholder={pick === "AAPL" ? "Everyone in my class wants AirPods…" : "Their chips make my games look amazing…"}
-                className="rounded-xl bg-white p-3 text-ink read-only:opacity-80"
+                className="field"
               />
               <p className="text-right text-xs text-moon-dim">{why.length}/280</p>
               {coach && (
@@ -552,7 +542,7 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="Your answer goes to Mum with your pitch…"
-                    className="rounded-xl bg-white p-3 text-ink"
+                    className="field"
                   />
                   <p className="text-xs text-moon-dim">
                     {coach.source === "ai" ? "Question asked live by Claude (AI)." : "Question written with Claude (AI) while building Allowance."} The coach never says
@@ -561,11 +551,11 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
                 </div>
               )}
               {!coach ? (
-                <button type="submit" disabled={busy || coachLoading || !why.trim()} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+                <button type="submit" disabled={busy || coachLoading || !why.trim()} className="btn">
                   {coachLoading ? "The coach is thinking…" : "Next: one question from the coach"}
                 </button>
               ) : (
-                <button type="submit" disabled={busy || !answer.trim()} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+                <button type="submit" disabled={busy || !answer.trim()} className="btn">
                   Send pitch to Mum ($0.01)
                 </button>
               )}
@@ -579,25 +569,22 @@ function KidNight({ state, busy, onPitch }: { state: State; busy: boolean; onPit
 
 function Savings({ state }: { state: State }) {
   const h = state.holdings;
+  const owned = h?.stocks.filter((s) => s.raw !== "0") ?? [];
   return (
-    <div className={`rounded-2xl p-4 ${state.session.morning ? "bg-white" : "bg-night-900"}`}>
-      <p className="text-sm opacity-80">Tobi&apos;s savings (read live from Base)</p>
-      <p className="text-3xl font-bold">{h ? usd(h.usdcMicro) : "…"}</p>
-      {state.events.some((e) => e.kind === "allowance" && e.status === "sending") && (
-        <p className="text-sm opacity-80">⏳ An allowance is landing on Base right now…</p>
-      )}
-      {h && h.stocks.some((s) => s.raw !== "0") && (
-        <ul className="mt-2 space-y-1 text-sm">
-          {h.stocks
-            .filter((s) => s.raw !== "0")
-            .map((s) => (
-              <li key={s.ticker}>
-                {COMPANIES[s.ticker].emoji} {s.shares.toFixed(7).replace(/0+$/, "")} shares of {COMPANIES[s.ticker].name}
-              </li>
-            ))}
+    <section className="stack-hero pb-6">
+      <p className="eyebrow">Tobi&apos;s savings, live from Base</p>
+      <p className="stat mt-1">{h ? usd(h.usdcMicro) : "…"}</p>
+      {state.events.some((e) => e.kind === "allowance" && e.status === "sending") && <p className="eyebrow mt-1">An allowance is landing on Base right now…</p>}
+      {owned.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {owned.map((s) => (
+            <li key={s.ticker} className="pill bg-white">
+              {COMPANIES[s.ticker].emoji} {s.shares.toFixed(7).replace(/0+$/, "")} {COMPANIES[s.ticker].name}
+            </li>
+          ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -618,17 +605,17 @@ function ParentView({
   const morning = state.session.morning;
   const [match, setMatch] = useState(50);
   return (
-    <section className={`flex flex-col gap-3 rounded-2xl p-5 ${morning ? "bg-white" : "bg-night-900"}`}>
-      <h2 className="text-lg font-semibold">Mum&apos;s inbox</h2>
+    <section className="card flex flex-col gap-3">
+      <h2 className="section-title">Mum&apos;s inbox</h2>
       {pitches.length === 0 && <p className="opacity-80">No pitches yet. Switch to Tobi and send one.</p>}
       {pitches.map((p) => (
-        <article key={p.id} className={`rounded-xl p-4 ${morning ? "bg-sunrise-50" : "bg-night-800"}`}>
+        <article key={p.id} className="rounded-3xl bg-night-800 p-4">
           <p className="font-semibold">
             Tobi wants to buy {usd(p.usdc_micro)} of {COMPANIES[p.ticker!].name} {COMPANIES[p.ticker!].emoji}
           </p>
           <p className="mt-1 opacity-90">“{p.why}”</p>
           {p.coach_q && (
-            <div className={`mt-2 rounded-lg p-2 text-sm ${morning ? "bg-white" : "bg-night-700"}`}>
+            <div className="mt-2 rounded-2xl bg-white p-3 text-sm">
               <p className="opacity-80">🧑‍🏫 Coach asked: {p.coach_q}</p>
               {p.coach_a && <p>Tobi answered: “{p.coach_a}”</p>}
             </div>
@@ -644,7 +631,7 @@ function ParentView({
                       type="button"
                       aria-pressed={match === m}
                       onClick={() => setMatch(m)}
-                      className={`rounded-lg px-2 py-2 text-sm ${match === m ? "bg-star font-semibold text-night-950" : morning ? "bg-white" : "bg-night-700"}`}
+                      className={`rounded-lg px-2 py-2 text-sm ${match === m ? "bg-star font-semibold text-night-950" : "bg-white"}`}
                     >
                       {m}%
                     </button>
@@ -656,7 +643,7 @@ function ParentView({
                 {usd(p.usdc_micro)} from Tobi&apos;s savings
                 {match > 0 ? ` + ${usd(Math.floor((p.usdc_micro * match) / 100))} from you (${match}% match)` : ""}. Held in your family vault.
               </p>
-              <button type="button" disabled={busy} onClick={() => onApprove(p.id, match)} className="mt-3 w-full rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+              <button type="button" disabled={busy} onClick={() => onApprove(p.id, match)} className="mt-3 w-full btn">
                 ✅ Approve (Demo approval)
               </button>
               <p className="mt-1 text-xs opacity-70">In the real app this step asks for Face ID or your fingerprint.</p>
@@ -681,7 +668,7 @@ function Graduation({ state, busy, onGraduate }: { state: State; busy: boolean; 
   const owns = state.holdings?.stocks.some((s) => s.raw !== "0");
   const landing = state.events.some((e) => e.status === "sending" && e.kind !== "graduation");
   return (
-    <article className="rounded-xl bg-sunrise-50 p-4">
+    <article className="rounded-3xl bg-night-800 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-sunrise-700">Fast-forward: Tobi turns 18 🎓</p>
       {grad ? (
         <>
@@ -709,7 +696,7 @@ function Graduation({ state, busy, onGraduate }: { state: State; busy: boolean; 
             type="button"
             disabled={busy || landing || !owns}
             onClick={onGraduate}
-            className="mt-3 w-full rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon disabled:opacity-60"
+            className="mt-3 w-full btn btn-soft"
           >
             🎓 Graduate Tobi (Demo approval)
           </button>
@@ -750,10 +737,10 @@ function RelativeView({
   const thanks = state.events.filter((e) => e.kind === "thank_you");
   const morning = state.session.morning;
   const now = state.session.virtualNow;
-  const panel = morning ? "bg-sunrise-50" : "bg-night-800";
+  const panel = "bg-night-800";
 
   return (
-    <section className={`flex flex-col gap-3 rounded-2xl p-5 ${morning ? "bg-white" : "bg-night-900"}`}>
+    <section className="card flex flex-col gap-3">
       <div className={`grid grid-cols-3 gap-2 rounded-xl p-3 text-center ${panel}`}>
         <div>
           <p className="text-xs opacity-70">London (Funmi)</p>
@@ -816,7 +803,7 @@ function RelativeView({
                 type="button"
                 aria-pressed={mode === id}
                 onClick={() => setMode(id)}
-                className={`rounded-xl p-3 font-semibold ${mode === id ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}
+                className={`rounded-3xl p-3 text-sm font-extrabold ${mode === id ? "bg-lime" : "bg-night-800"}`}
               >
                 {label}
               </button>
@@ -833,7 +820,7 @@ function RelativeView({
               <legend className="font-semibold">Gift a slice of</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {(Object.keys(COMPANIES) as Ticker[]).map((t) => (
-                  <button key={t} type="button" aria-pressed={ticker === t} onClick={() => setTicker(t)} className={`rounded-xl p-3 ${ticker === t ? "bg-night-700 ring-2 ring-star" : "bg-night-800"}`}>
+                  <button key={t} type="button" aria-pressed={ticker === t} onClick={() => setTicker(t)} className={`rounded-3xl p-4 font-extrabold ${ticker === t ? "bg-lime" : "bg-night-800"}`}>
                     {COMPANIES[t].emoji} {COMPANIES[t].name}
                   </button>
                 ))}
@@ -841,7 +828,7 @@ function RelativeView({
             </fieldset>
             <label className="flex flex-col gap-1">
               <span className="font-semibold">Occasion</span>
-              <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="rounded-xl bg-white p-3 text-ink">
+              <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="field">
                 {OCCASIONS.map((o) => (
                   <option key={o}>{o}</option>
                 ))}
@@ -849,7 +836,7 @@ function RelativeView({
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-semibold">Message</span>
-              <input value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
+              <input value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} className="field" />
             </label>
             <div className="rounded-xl bg-night-800 p-3 text-xs text-moon-dim">
               {mode === "solo" ? (
@@ -863,7 +850,7 @@ function RelativeView({
               <p>Tobi gets: a slice of a real Coinbase tokenized {COMPANIES[ticker].name} share</p>
               <p>Goes to: the Adeyemi family vault (demo; Allowance pays)</p>
             </div>
-            <button type="submit" disabled={busy} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+            <button type="submit" disabled={busy} className="btn">
               {mode === "solo" ? "🎁 Send gift" : "👨🏾‍👩🏾‍👧🏾 Start group gift and chip in $0.01"}
             </button>
           </form>
@@ -895,7 +882,7 @@ function GroupGiftCard({
   const pct = Math.min(100, Math.round((raised / group.usdc_micro) * 100));
   const open = group.status === "pending" || group.status === "queued";
   return (
-    <div className={`flex flex-col gap-3 rounded-xl p-4 ${morning ? "bg-sunrise-50" : "bg-night-800"}`}>
+    <div className="flex flex-col gap-3 rounded-3xl bg-night-800 p-4">
       <p className="font-semibold">
         👨🏾‍👩🏾‍👧🏾 {group.occasion} group gift: {COMPANIES[group.ticker!].name} for Tobi
       </p>
@@ -929,7 +916,7 @@ function GroupGiftCard({
       {open && !morning && (
         <div className="flex flex-col gap-2">
           {!dayoIn && (
-            <button type="button" disabled={busy} onClick={onChipIn} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+            <button type="button" disabled={busy} onClick={onChipIn} className="btn">
               🧔🏾 Switch to Uncle Dayo: chip in $0.01
             </button>
           )}
@@ -969,17 +956,16 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="rounded-2xl bg-gradient-to-b from-sunrise-300 to-sunrise-100 p-5 text-ink">
-        <p className="text-sm font-semibold uppercase tracking-wide">Good morning, Tobi ☀️</p>
-        <h2 className="mt-1 text-2xl font-bold">Your Morning Report</h2>
-        <p className="text-sm">Here&apos;s what arrived while you slept.</p>
+      <div className="stack-hero pb-6">
+        <p className="eyebrow">Good morning, Tobi. Here&apos;s what arrived while you slept.</p>
+        <h1 className="screen-title mt-1">Your Morning Report</h1>
       </div>
 
       {gifts.map((g) => (
-        <article key={g.id} className="rounded-2xl bg-white p-4">
+        <article key={g.id} className="card">
           {g.status === "confirmed" ? (
             <>
-              <p className="text-lg font-semibold">
+              <p className="font-extrabold leading-snug">
                 {g.kind === "group_gift"
                   ? `🎁 Aunty Funmi and Uncle Dayo chipped in together for a slice of ${COMPANIES[g.ticker!].name} while you slept.`
                   : `🎁 Aunty Funmi sent you a slice of ${COMPANIES[g.ticker!].name} while you slept.`}
@@ -1000,9 +986,9 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
                   <label htmlFor={`ty-${g.id}`} className="text-sm font-semibold">
                     Send a thank-you to {g.kind === "group_gift" ? "London and Houston" : "London"}
                   </label>
-                  <input id={`ty-${g.id}`} value={text} maxLength={280} onChange={(e) => setText(e.target.value)} className="rounded-xl border border-sunrise-300 p-3" />
+                  <input id={`ty-${g.id}`} value={text} maxLength={280} onChange={(e) => setText(e.target.value)} className="field" />
                   <VoiceRecorder onChange={setVoice} />
-                  <button type="submit" disabled={busy || (!text.trim() && !voice)} className="rounded-xl bg-sunrise-500 px-4 py-3 font-semibold text-white disabled:opacity-60">
+                  <button type="submit" disabled={busy || (!text.trim() && !voice)} className="btn">
                     💌 Send thank-you{voice ? " with voice note" : ""}
                   </button>
                 </form>
@@ -1019,8 +1005,8 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
       ))}
 
       {pitches.map((p) => (
-        <article key={p.id} className="rounded-2xl bg-white p-4">
-          <p className="text-lg font-semibold">✅ Mum approved your {COMPANIES[p.ticker!].name} pitch!</p>
+        <article key={p.id} className="card">
+          <p className="font-extrabold leading-snug">✅ Mum approved your {COMPANIES[p.ticker!].name} pitch!</p>
           {p.match_pct > 0 && (
             <p className="text-sm font-semibold text-sunrise-700">
               💛 Mum matched {p.match_pct}%: +{usd(p.match_micro)} on top of your {usd(p.usdc_micro)}.
@@ -1033,20 +1019,20 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
       ))}
 
       {waiting && (
-        <article className="rounded-2xl bg-white p-4">
-          <p className="text-lg font-semibold">🕒 Your {COMPANIES[waiting.ticker!].name} pitch is waiting for Mum.</p>
+        <article className="card">
+          <p className="font-extrabold leading-snug">🕒 Your {COMPANIES[waiting.ticker!].name} pitch is waiting for Mum.</p>
           <p className="text-sm opacity-80">She&apos;ll see it at breakfast. (Switch to Mum to approve it.)</p>
         </article>
       )}
 
       {allowance && (
-        <article className="rounded-2xl bg-white p-4">
-          <p className="text-lg font-semibold">🌙 Your allowance landed at midnight: {usd(allowance.usdc_micro)}</p>
+        <article className="card">
+          <p className="font-extrabold leading-snug">🌙 Your allowance landed at midnight: {usd(allowance.usdc_micro)}</p>
           {allowance.txUrl && <TxLink href={allowance.txUrl} />}
         </article>
       )}
 
-      <article className="rounded-2xl bg-white p-4">
+      <article className="card">
         {state.dividends.length > 0 ? (
           state.dividends.map((d) => (
             <p key={d.ticker} className="text-lg font-semibold">
@@ -1060,11 +1046,11 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
         )}
       </article>
 
-      {gifts.length === 0 && pitches.length === 0 && <p className="rounded-2xl bg-white p-4">A quiet night. Your allowance still landed!</p>}
+      {gifts.length === 0 && pitches.length === 0 && <p className="card">A quiet night. Your allowance still landed!</p>}
 
       {graduated ? (
-        <article className="rounded-2xl bg-white p-4">
-          <p className="text-lg font-semibold">🎓 You graduated! Everything you own is in your own wallet now.</p>
+        <article className="card">
+          <p className="font-extrabold leading-snug">🎓 You graduated! Everything you own is in your own wallet now.</p>
           {graduated.txUrl && <TxLink href={graduated.txUrl} />}
         </article>
       ) : (
@@ -1072,7 +1058,7 @@ function MorningReport({ state, busy, onThank }: { state: State; busy: boolean; 
       )}
 
       <div className="flex flex-col gap-1">
-        <button type="button" onClick={save} className="rounded-xl bg-night-900 px-4 py-3 font-semibold text-moon">
+        <button type="button" onClick={save} className="btn btn-soft">
           📸 Save my Morning Report as an image
         </button>
         {saving && <p className="text-center text-sm opacity-80">{saving}</p>}
@@ -1200,18 +1186,18 @@ function Leaderboard({ state }: { state: State }) {
     .map((r) => ({ ...r, points: r.pitches + r.approvals * 2 + r.thanks }))
     .sort((a, b) => b.points - a.points);
   return (
-    <section className="rounded-2xl bg-white p-4" aria-labelledby="lb">
+    <section className="card" aria-labelledby="lb">
       <h3 id="lb" className="text-lg font-semibold">
         🏆 Family leaderboard
       </h3>
       <p className="text-xs opacity-70">Points for pitches made (1), approvals won (2) and thank-yous sent (1). Never for how much money anyone made.</p>
       <ol className="mt-2 flex flex-col gap-1">
         {rows.map((r, i) => (
-          <li key={r.name} className={`flex items-center justify-between rounded-lg px-2 py-1 ${r.live ? "bg-sunrise-100 font-semibold" : ""}`}>
+          <li key={r.name} className={`row flex-wrap justify-between ${r.live ? "font-extrabold" : "font-semibold"}`}>
             <span>
               {i + 1}. {r.face} {r.name}
             </span>
-            <span className="text-sm">
+            <span className="text-xs text-moon-dim">
               {r.points} pts · {r.pitches} pitch{r.pitches === 1 ? "" : "es"} · {r.approvals} approved · {r.thanks} thanks
             </span>
           </li>
@@ -1244,14 +1230,14 @@ function NightShift() {
 
 function Replay({ items }: { items: ReplayItem[] }) {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-10">
-      <h1 className="text-2xl font-bold">Today&apos;s live demo budget is used up</h1>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-10">
+      <h1 className="screen-title">Today&apos;s live demo budget is used up</h1>
       <p className="text-moon-dim">
         Allowance pays for every demo transaction, and we keep it to a few cents a day. Here are the most recent real demo transactions instead.
       </p>
       <ul className="flex flex-col gap-2">
         {items.map((i) => (
-          <li key={i.txUrl} className="rounded-2xl bg-night-900 p-4">
+          <li key={i.txUrl} className="card">
             <p className="text-xs font-semibold uppercase tracking-wide text-star">Replay of a real transaction</p>
             <p className="mt-1">
               {i.kind === "gift" || i.kind === "group_gift"

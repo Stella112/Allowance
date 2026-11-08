@@ -59,7 +59,7 @@ function Claim({ code }: { code: string }) {
       </section>
     );
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
+    <section className="flex flex-col gap-3 card">
       {error && (
         <p role="alert" className="rounded-xl bg-red-100 px-3 py-2 text-sm text-red-900">
           {error}
@@ -68,7 +68,7 @@ function Claim({ code }: { code: string }) {
       {!isSignedIn ? (
         <AuthButton />
       ) : (
-        <button type="button" disabled={busy} onClick={claim} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+        <button type="button" disabled={busy} onClick={claim} className="btn">
           {busy ? "Checking…" : "Use my new wallet for graduation"}
         </button>
       )}

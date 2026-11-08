@@ -39,10 +39,7 @@ export default function ParentApp() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 px-4 py-8">
-      <Link href="/" className="text-sm font-semibold">
-        ← Allowance
-      </Link>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 pb-32 pt-5">
       {children}
     </main>
   );
@@ -116,20 +113,25 @@ function ParentFlow() {
     <>
       {me ? (
         <header className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-star text-2xl text-white">🌙</span>
-          <div>
-            <p className="text-sm text-moon-dim">Good to see you</p>
-            <h1 className="text-2xl font-extrabold">Your family</h1>
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-sunny text-2xl" aria-hidden>
+            🌙
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-moon-dim">Good to see you</p>
+            <h1 className="text-xl font-extrabold leading-tight">Your family</h1>
           </div>
+          <button type="button" onClick={logOut} className="btn btn-sm btn-white shadow">
+            Sign out
+          </button>
         </header>
       ) : (
-      <header>
-        <p className="text-5xl" aria-hidden>
-          🌙
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">For parents</h1>
-        <p className="mt-1 text-moon-dim">Sign in with your email and a 6-digit code. No password, no seed phrase. A secure wallet is created for you on Base.</p>
-      </header>
+        <header className="mt-8">
+          <Link href="/" className="text-sm font-extrabold text-moon-dim">
+            ← Allowance
+          </Link>
+          <h1 className="screen-title mt-6">For parents</h1>
+          <p className="mt-2 font-semibold text-moon-dim">Sign in with your email and a 6-digit code. No password, no seed phrase. A secure wallet is created for you on Base.</p>
+        </header>
       )}
 
       {error && (
@@ -144,7 +146,7 @@ function ParentFlow() {
       )}
 
       {!isSignedIn ? (
-        <section className="rounded-2xl bg-night-900 p-5">
+        <section className="card">
           <AuthButton />
         </section>
       ) : !me ? (
@@ -155,28 +157,28 @@ function ParentFlow() {
           </p>
         )
       ) : !me.hasPasskey ? (
-        <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
-          <h2 className="text-lg font-semibold">Step 2: turn on Face ID or fingerprint</h2>
+        <section className="card flex flex-col gap-3">
+          <h2 className="section-title">Step 2: turn on Face ID or fingerprint</h2>
           <p className="text-moon-dim">
             Every approval asks for it, and we check it on our server. That way a kid up late on your phone can&apos;t approve their own pitch.
           </p>
-          <button type="button" onClick={setupPasskey} disabled={!!busy} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
-            🔐 Set up Face ID / fingerprint
+          <button type="button" onClick={setupPasskey} disabled={!!busy} className="btn">
+            Set up Face ID / fingerprint
           </button>
         </section>
       ) : (
         <>
-          <p className="break-all text-sm text-moon-dim">
-            Signed in as {me.parent.email ?? "a parent"} · Wallet{" "}
+          <Family />
+          <p className="note break-all text-center">
+            Signed in as {me.parent.email ?? "a parent"} ·{" "}
             <a className="underline" href={`https://basescan.org/address/${me.parent.wallet}`} target="_blank" rel="noreferrer">
-              {me.parent.wallet}
+              View wallet
             </a>
           </p>
-          <Family />
         </>
       )}
 
-      {isSignedIn && (
+      {isSignedIn && !me && (
         <button type="button" onClick={logOut} className="self-start text-sm underline">
           Sign out
         </button>

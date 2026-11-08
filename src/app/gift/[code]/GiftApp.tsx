@@ -189,7 +189,7 @@ export default function GiftApp({ code }: { code: string }) {
   if (info.kid.graduated) return <p className="p-8">{kidName} has graduated and now has their own wallet. Ask the family for their new gift link.</p>;
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-8">
+    <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-8">
       <header className={`rounded-2xl bg-gradient-to-b ${theme.card} p-5 text-ink`}>
         <p className="text-5xl" aria-hidden>
           {info.kid.avatar} {theme.emoji}
@@ -200,7 +200,7 @@ export default function GiftApp({ code }: { code: string }) {
         <p className="text-sm">Real Coinbase tokenized shares on Base, held in {kidName}&apos;s family vault.</p>
       </header>
 
-      <section className="grid grid-cols-2 gap-2 rounded-2xl bg-night-900 p-4 text-center">
+      <section className="grid grid-cols-2 gap-2 card text-center">
         <div>
           <p className="text-xs text-moon-dim">Your time</p>
           <p className="text-2xl font-bold">{timeIn(undefined)}</p>
@@ -231,7 +231,7 @@ export default function GiftApp({ code }: { code: string }) {
       )}
 
       {g && (
-        <section className="rounded-2xl bg-night-900 p-4">
+        <section className="card">
           <div className="h-3 overflow-hidden rounded-full bg-night-700" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((Number(g.raised) / Number(g.target)) * 100))} aria-label="Raised so far">
             <div className="h-full bg-star" style={{ width: `${Math.min(100, (Number(g.raised) / Number(g.target)) * 100)}%` }} />
           </div>
@@ -256,7 +256,7 @@ export default function GiftApp({ code }: { code: string }) {
         </section>
       ) : info.kind === "group" && !open ? null : (
         <form
-          className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5"
+          className="flex flex-col gap-3 card"
           onSubmit={(e) => {
             e.preventDefault();
             if (!account) connect();
@@ -296,7 +296,7 @@ export default function GiftApp({ code }: { code: string }) {
           </fieldset>
           <label className="flex flex-col gap-1">
             <span className="font-semibold">Occasion</span>
-            <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="rounded-xl bg-white p-3 text-ink">
+            <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className="field">
               {info.occasions.map((o) => (
                 <option key={o}>{o}</option>
               ))}
@@ -304,11 +304,11 @@ export default function GiftApp({ code }: { code: string }) {
           </label>
           <label className="flex flex-col gap-1">
             <span className="font-semibold">Your name (what {kidName} calls you)</span>
-            <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} placeholder="Aunty Funmi" className="rounded-xl bg-white p-3 text-ink" />
+            <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} placeholder="Aunty Funmi" className="field" />
           </label>
           <label className="flex flex-col gap-1">
             <span className="font-semibold">Message</span>
-            <input value={message} maxLength={200} placeholder={theme.message(kidName)} onChange={(e) => setMessage(e.target.value)} className="rounded-xl bg-white p-3 text-ink" />
+            <input value={message} maxLength={200} placeholder={theme.message(kidName)} onChange={(e) => setMessage(e.target.value)} className="field" />
           </label>
 
           <div className="rounded-xl bg-night-800 p-3 text-sm">
@@ -333,7 +333,7 @@ export default function GiftApp({ code }: { code: string }) {
             </p>
           )}
           {busy && <p aria-live="polite" className="text-sm">⏳ {busy}</p>}
-          <button type="submit" disabled={!!busy} className="rounded-xl bg-star px-4 py-3 font-semibold text-night-950 disabled:opacity-60">
+          <button type="submit" disabled={!!busy} className="btn">
             {!account ? "Connect my wallet" : info.kind === "group" ? `Chip in ${usd(micro)}` : `Send ${usd(micro)} of ${COMPANIES[ticker].name}`}
           </button>
           <p className="text-xs text-moon-dim">You pay a small network fee in ETH on Base. Allowance never asks for your seed phrase or password. Learning gift only, not financial advice.</p>
