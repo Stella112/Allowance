@@ -711,8 +711,8 @@ function GiftLinks({
 }) {
   const [kidId, setKidId] = useState(state.kids[0]?.id ?? "");
   const [kind, setKind] = useState<"single" | "group">("single");
-  const [ticker, setTicker] = useState<Ticker>("AAPL");
-  const [target, setTarget] = useState("5");
+  const [ticker, setTicker] = useState<Ticker | "">("AAPL");
+  const [target, setTarget] = useState("1");
   const [copied, setCopied] = useState<string | null>(null);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const kidName = (id: string) => state.kids.find((k) => k.id === id)?.nickname ?? "your child";
@@ -721,9 +721,9 @@ function GiftLinks({
     <section className="flex flex-col gap-3 rounded-2xl bg-night-900 p-5">
       <h2 className="text-lg font-semibold">✈️ Gift links for family abroad</h2>
       <p className="text-sm text-moon-dim">
-        Share a link on WhatsApp. <strong>The relative chooses the company, the amount (up to $5), the occasion and a message</strong> when they open it, then pays in
-        USDC from their own wallet. No Allowance account needed. For a <strong>group gift</strong>, you pick the company and the target amount here, and
-        several relatives chip in.
+        Share a link on WhatsApp. Pick the company and amount here, or let the relative choose. They add an occasion and a message, then pay in USDC from their
+        own wallet, and the vault turns it into <strong>real shares</strong> for your kid (gifts arrive as shares, not cash). No Allowance account needed. For a{" "}
+        <strong>group gift</strong>, several relatives chip in toward a target.
       </p>
       <div className="flex flex-wrap gap-2">
         <select aria-label="For which child" value={kidId} onChange={(e) => setKidId(e.target.value)} className="rounded-lg bg-white p-2 text-ink">
@@ -737,22 +737,31 @@ function GiftLinks({
           <option value="single">Gift link</option>
           <option value="group">Group gift link</option>
         </select>
-        {kind === "group" && (
-          <>
-            <select aria-label="Company" value={ticker} onChange={(e) => setTicker(e.target.value as Ticker)} className="rounded-lg bg-white p-2 text-ink">
-              <option value="AAPL">🍎 Apple</option>
-              <option value="NVDA">🎮 Nvidia</option>
-            </select>
-            <label className="flex items-center gap-1 text-sm">
-              Target $
-              <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} className="w-20 rounded-lg bg-white p-2 text-ink" />
-            </label>
-          </>
-        )}
+        <select aria-label="Company" value={ticker} onChange={(e) => setTicker(e.target.value as Ticker | "")} className="rounded-lg bg-white p-2 text-ink">
+          {kind === "single" && <option value="">Relative chooses</option>}
+          <option value="AAPL">🍎 Apple</option>
+          <option value="NVDA">🎮 Nvidia</option>
+        </select>
+        <label className="flex items-center gap-1 text-sm">
+          {kind === "group" ? "Target $" : "Amount $"}
+          <input
+            inputMode="decimal"
+            value={target}
+            placeholder={kind === "single" ? "they choose" : ""}
+            onChange={(e) => setTarget(e.target.value)}
+            className="w-24 rounded-lg bg-white p-2 text-ink"
+          />
+        </label>
         <button
           type="button"
           disabled={busy || !kidId}
-          onClick={() => onCreate(kind === "group" ? { kidId, kind, ticker, target: Number(target) } : { kidId, kind })}
+          onClick={() =>
+            onCreate(
+              kind === "group"
+                ? { kidId, kind, ticker: ticker || "AAPL", target: Number(target) }
+                : { kidId, kind, ticker: ticker || undefined, target: target.trim() ? Number(target) : undefined },
+            )
+          }
           className="rounded-lg bg-star px-3 py-2 font-semibold text-night-950 disabled:opacity-60"
         >
           Make link
@@ -766,7 +775,10 @@ function GiftLinks({
             return (
               <li key={l.code} className="flex flex-wrap items-center gap-2 rounded-lg bg-night-800 p-2">
                 <span className="flex-1">
-                  {l.kind === "group" ? `👨🏾‍👩🏾‍👧🏾 Group gift (${l.ticker === "NVDA" ? "Nvidia" : "Apple"}, target ${usd(l.target_micro)})` : "🎁 Gift link"} for{" "}
+                  {l.kind === "group"
+                    ? `👨🏾‍👩🏾‍👧🏾 Group gift (${l.ticker === "NVDA" ? "Nvidia" : "Apple"}, target ${usd(l.target_micro)})`
+                    : `🎁 ${l.target_micro ? usd(l.target_micro) : "Any amount"} of ${l.ticker === "NVDA" ? "Nvidia" : l.ticker === "AAPL" ? "Apple" : "their choice"}`}{" "}
+                  for{" "}
                   {kidName(l.kid_id)}
                 </span>
                 <button

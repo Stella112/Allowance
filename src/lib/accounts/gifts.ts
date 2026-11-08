@@ -37,7 +37,13 @@ export async function createGiftLink(parent: Parent, input: { kidId: unknown; ki
   const kind = input.kind === "group" ? "group" : "single";
   const code = newCode();
   if (kind === "single") {
-    const { error } = await db().from("gift_links").insert({ code, parent_id: parent.id, kid_id: kid.id, kind });
+    // Optional: the parent picks the company and a suggested amount; otherwise the relative chooses.
+    const ticker = isTicker(input.ticker) ? input.ticker : null;
+    const suggested = input.target === undefined || input.target === null || input.target === "" ? null : Math.round(Number(input.target) * 1e6);
+    if (suggested !== null && (!Number.isFinite(suggested) || suggested < 10_000 || suggested > MAX_GIFT_MICRO)) {
+      throw new AccountError("Pick an amount between $0.01 and $5.");
+    }
+    const { error } = await db().from("gift_links").insert({ code, parent_id: parent.id, kid_id: kid.id, kind, ticker, target_micro: suggested });
     if (error) throw error;
     return code;
   }
@@ -93,6 +99,7 @@ export async function publicGiftLink(code: string, who?: string | null) {
     tokens: Object.fromEntries((Object.keys(STOCKS) as Ticker[]).map((t) => [t, STOCKS[t].token])),
     kind: link.kind,
     ticker: link.ticker,
+    suggestedMicro: link.kind === "single" ? link.target_micro : null,
     group: group
       ? {
           id: link.group_chain_id,

@@ -12,6 +12,7 @@ type LinkInfo = {
   tokens: Record<Ticker, `0x${string}`>;
   kind: "single" | "group";
   ticker: Ticker | null;
+  suggestedMicro: number | null;
   group: { id: string; status: string; target: string; raised: string; mine: string | null } | null;
   occasions: string[];
   maxGiftMicro: number;
@@ -82,6 +83,7 @@ export default function GiftApp({ code }: { code: string }) {
       .then((r) => {
         setInfo(r);
         if (r.ticker) setTicker(r.ticker);
+        if (r.suggestedMicro) setAmount(String(r.suggestedMicro / 1e6));
       })
       .catch((e) => setError(e.message));
   }, [code]);
@@ -260,7 +262,12 @@ export default function GiftApp({ code }: { code: string }) {
             else send();
           }}
         >
-          {info.kind === "single" && (
+          {info.kind === "single" && info.ticker && (
+            <p className="rounded-xl bg-night-800 p-3 font-semibold">
+              {COMPANIES[info.ticker].emoji} The family picked {COMPANIES[info.ticker].name} for {kidName}.
+            </p>
+          )}
+          {info.kind === "single" && !info.ticker && (
             <fieldset>
               <legend className="font-semibold">Pick a company</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
