@@ -13,6 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { config } from "./config";
 import { STOCKS, type Ticker } from "./stocks";
+import { AccountError } from "./accounts/errors";
 
 // Minimal ABIs. Sources: contracts/src/FamilyVault.sol; Slipstream IQuoterV2; Base B20 docs.
 const vaultAbi = parseAbi([
@@ -126,6 +127,7 @@ export async function releaseAllowance(kidId: Hash, vault: `0x${string}` = confi
 /** Buys shares for an approved pitch. matchBps (0..10000) is the parent's match, paid from the family pool. */
 export async function pitchBuy(kidId: Hash, ticker: Ticker, usdcMicro: bigint, matchBps = 0n, vault: `0x${string}` = config.demoVault()) {
   const total = usdcMicro + (usdcMicro * matchBps) / 10_000n;
+  await assertVaultCanHold(vault, ticker);
   const { minOut } = await quoteMinOut(ticker, total);
   const receipt = await send(() =>
     wallet().writeContract({
@@ -152,6 +154,7 @@ async function ensureUsdcApproval(amount: bigint) {
 /** Demo gift: the relayer wallet plays Aunty Funmi and pays from its own USDC. */
 export async function giftFromRelayer(kidId: Hash, ticker: Ticker, usdcMicro: bigint, gifterTag: Hash) {
   const vault = config.demoVault();
+  await assertVaultCanHold(vault, ticker);
   await ensureUsdcApproval(usdcMicro);
   const { minOut } = await quoteMinOut(ticker, usdcMicro);
   const receipt = await send(() =>
@@ -229,10 +232,21 @@ export async function canReceive(vault: `0x${string}`, token: `0x${string}`, to:
   return publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "canReceive", args: [token, to] });
 }
 
+/**
+ * Stops a buy or gift before any money moves if the stock's transfer rules would refuse the vault,
+ * since the vault is the receiver of every swap. Fails closed: if the rule can't be read, nothing is sent.
+ */
+export async function assertVaultCanHold(vault: `0x${string}`, ticker: Ticker) {
+  if (!(await canReceive(vault, STOCKS[ticker].token, vault))) {
+    throw new AccountError(`${ticker} can't be bought for this family right now: the stock's transfer rules don't allow it. No money has moved.`, 409);
+  }
+}
+
 // ---------------------------------------------------------------- v2 writes (demo: the relayer plays every relative)
 
 /** Opens a group gift for a kid. Returns the on-chain group gift id. */
 export async function openGroupGiftTx(kidId: Hash, ticker: Ticker, targetMicro: bigint, vault: `0x${string}` = config.demoVault()) {
+  await assertVaultCanHold(vault, ticker);
   const receipt = await send(() =>
     wallet().writeContract({
       address: vault,
@@ -257,6 +271,7 @@ export async function contributeTx(id: bigint, usdcMicro: bigint, gifterTag: Has
 
 /** Turns a group gift's escrow into shares for the kid (the relayer is the organizer, so it can close it any time). */
 export async function settleGroupGiftTx(id: bigint, ticker: Ticker, raisedMicro: bigint, vault: `0x${string}` = config.demoVault()) {
+  await assertVaultCanHold(vault, ticker);
   const { minOut } = await quoteMinOut(ticker, raisedMicro);
   const receipt = await send(() =>
     wallet().writeContract({ address: vault, abi: vaultAbi, functionName: "settleGroupGift", args: [id, minOut, deadline()] }),

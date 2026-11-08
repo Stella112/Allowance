@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import type { Hash } from "viem";
-import { contributionOf, groupGift, openGroupGiftTx, quoteMinOut, readGiftTx } from "../chain";
+import { assertVaultCanHold, contributionOf, groupGift, openGroupGiftTx, quoteMinOut, readGiftTx } from "../chain";
 import { config, txUrl } from "../config";
 import { db } from "../db";
 import { STOCKS, isTicker, type Ticker } from "../stocks";
@@ -118,10 +118,11 @@ export async function publicGiftLink(code: string, who?: string | null) {
 
 /** A fresh minimum-out for a single gift, so the relative's transaction is protected against slippage. */
 export async function giftQuote(code: string, ticker: unknown, amount: unknown) {
-  await linkByCode(code);
+  const { vault } = await linkByCode(code);
   if (!isTicker(ticker)) throw new AccountError("Pick Apple or Nvidia.");
   const micro = Math.round(Number(amount) * 1e6);
   if (!Number.isFinite(micro) || micro < 10_000 || micro > MAX_GIFT_MICRO) throw new AccountError("Gifts are from $0.01 to $5.");
+  await assertVaultCanHold(vault, ticker);
   const { minOut } = await quoteMinOut(ticker, BigInt(micro));
   return { minOut: minOut.toString(), deadline: Math.floor(Date.now() / 1000) + 600 };
 }

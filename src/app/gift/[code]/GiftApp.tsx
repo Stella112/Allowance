@@ -157,6 +157,8 @@ export default function GiftApp({ code }: { code: string }) {
     run("Preparing your gift…", async () => {
       if (!(micro >= 10_000 && micro <= info.maxGiftMicro)) throw new Error(`Gifts are from $0.01 to ${usd(info.maxGiftMicro)}.`);
       const need = BigInt(micro);
+      // The server checks the stock's transfer rules here, so a gift that would fail stops before any approval.
+      const q = await api<{ minOut: string; deadline: number }>(code, `?quote=1&ticker=${ticker}&amount=${micro / 1e6}`);
       await ensureApproval(need);
       const { wallet, reader } = clients();
       setBusy(info.kind === "group" ? "Chipping in on Base…" : "Sending your gift on Base…");
@@ -164,7 +166,6 @@ export default function GiftApp({ code }: { code: string }) {
       if (info.kind === "group") {
         hash = await wallet.writeContract({ address: info.vault, abi: vaultAbi, functionName: "contributeToGroupGift", args: [BigInt(g!.id), need, tag] });
       } else {
-        const q = await api<{ minOut: string; deadline: number }>(code, `?quote=1&ticker=${ticker}&amount=${micro / 1e6}`);
         hash = await wallet.writeContract({
           address: info.vault,
           abi: vaultAbi,
