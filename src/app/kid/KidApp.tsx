@@ -202,7 +202,7 @@ function Switcher({ profiles, panel, busy, onSwitch }: { profiles: Profile[]; pa
 }
 
 /* Outlined, chunky cards in the style of the kids' finance references. */
-const CARD = "rounded-3xl border-2 border-ink bg-white p-4 text-ink shadow-[0_4px_0_0_#25243A]";
+const CARD = "rounded-3xl bg-white p-4 text-ink shadow-[var(--shadow)]";
 
 function Piggy({ className = "" }: { className?: string }) {
   return (
@@ -305,12 +305,12 @@ function KidHome({
     <div className="flex flex-col gap-4 pb-28">
       {/* Header */}
       <header className="flex items-center gap-3">
-        <span className="grid h-14 w-14 place-items-center rounded-full border-2 border-ink bg-[#FFE6DD] text-3xl">{kid.avatar}</span>
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-[#FFE6DD] text-3xl shadow-sm">{kid.avatar}</span>
         <div className="flex-1">
           <p className="text-sm font-semibold opacity-70">{night ? "Good night 🌙" : "Hello ☀️"}</p>
           <h1 className="text-2xl font-black">{kid.nickname}</h1>
         </div>
-        <button type="button" onClick={() => go("report")} aria-label={`Morning Report, ${newThings} new`} className="relative grid h-12 w-12 place-items-center rounded-full border-2 border-ink bg-white text-xl">
+        <button type="button" onClick={() => go("report")} aria-label={`Morning Report, ${newThings} new`} className="relative grid h-12 w-12 place-items-center rounded-full bg-white text-xl shadow-sm">
           🔔
           {newThings > 0 && (
             <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-star px-1 text-xs font-black text-white">{newThings}</span>
@@ -320,26 +320,26 @@ function KidHome({
 
       {tab === "home" && (
         <>
-          <section className={`${CARD} flex items-center gap-3`}>
+          <section className="flex items-center gap-3 rounded-3xl bg-gradient-to-br from-[#8A6DF0] to-[#6A4BE0] p-5 text-white shadow-[var(--shadow)]">
             <div className="flex-1">
-              <p className="text-sm font-bold opacity-70">Total savings</p>
-              <p className="text-4xl font-black tracking-tight">{state.hasVault ? usd(savings) : "…"}</p>
-              <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[#1F6B4A]">● live from Base</p>
+              <p className="text-sm font-semibold opacity-80">Total savings</p>
+              <p className="mt-1 text-4xl font-extrabold tracking-tight">{state.hasVault ? usd(savings) : "…"}</p>
+              <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold opacity-80">● live from Base</p>
             </div>
             <Piggy className="h-24 w-28" />
           </section>
           <div className="grid grid-cols-2 gap-3">
             <button type="button" onClick={() => go("invest")} className={`${CARD} flex items-center gap-2 bg-[#FFE6DD] py-3 font-black`}>
-              <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">🚀</span> Pitch
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">🚀</span> Pitch
             </button>
             <button type="button" onClick={() => go("report")} className={`${CARD} flex items-center gap-2 bg-[#EDE7FF] py-3 font-black`}>
-              <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">☀️</span> Report
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">☀️</span> Report
             </button>
           </div>
           <button type="button" onClick={() => go("goals")} className={`${CARD} flex items-center gap-3 bg-[#E6F59A] text-left`}>
             <div className="flex-1">
               <p className="flex items-center gap-2 text-sm font-black">
-                <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-white">🎯</span> Goal progress
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white/70">🎯</span> Goal progress
               </p>
               <p className="mt-2 text-5xl font-black">{goal ? `${goalPct}%` : "Set one!"}</p>
               {goal && <p className="text-sm font-bold">{goal.emoji} {goal.name}</p>}
@@ -356,7 +356,7 @@ function KidHome({
             {owned.length ? (
               owned.map((s) => (
                 <div key={s.ticker} className={`${CARD} flex items-center gap-3 py-3`}>
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-ink bg-[#DDF5E8] text-xl">{COMPANIES[s.ticker].emoji}</span>
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#DDF5E8] text-xl">{COMPANIES[s.ticker].emoji}</span>
                   <span className="flex-1 font-black">{COMPANIES[s.ticker].name}</span>
                   <span className="text-sm font-bold">{s.shares.toFixed(7).replace(/0+$/, "")} shares</span>
                 </div>
@@ -365,7 +365,7 @@ function KidHome({
               <p className={`${CARD} py-3 text-sm font-semibold`}>None yet. Pitch a company and ask your parent!</p>
             )}
             <div className={`${CARD} flex items-center gap-3 bg-[#FFF1C9] py-3`}>
-              <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-ink bg-white text-xl">🌙</span>
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-xl shadow-sm">🌙</span>
               <span className="flex-1 font-black">Allowance</span>
               <span className="text-sm font-bold">
                 {state.allowance && state.allowance.amountMicro !== "0" ? `${usd(state.allowance.amountMicro)} while you sleep` : "Not set yet"}
@@ -421,7 +421,7 @@ function KidHome({
                     {usd(savings)} / {usd(goal.targetMicro)}
                   </span>
                 </div>
-                <div className="mt-2 h-4 overflow-hidden rounded-full border-2 border-ink bg-white" role="progressbar" aria-valuenow={goalPct} aria-valuemin={0} aria-valuemax={100} aria-label={goal.name}>
+                <div className="mt-2 h-4 overflow-hidden rounded-full bg-white/70" role="progressbar" aria-valuenow={goalPct} aria-valuemin={0} aria-valuemax={100} aria-label={goal.name}>
                   <div className="h-full" style={{ width: `${goalPct}%` }} />
                 </div>
                 <p className="mt-3 font-black">
@@ -449,7 +449,7 @@ function KidHome({
       {/* Bottom tab bar */}
       {createPortal(
 <nav aria-label="Kid sections" className="fixed inset-x-0 bottom-0 z-40 p-3">
-        <div className="mx-auto grid max-w-xl grid-cols-4 rounded-3xl border-2 border-ink bg-white p-1.5 text-ink shadow-[0_4px_0_0_#25243A]">
+        <div className="mx-auto grid max-w-xl grid-cols-4 rounded-3xl border border-[#EDE7FF] bg-white/90 p-1.5 text-ink shadow-[var(--shadow)] backdrop-blur">
           {(
             [
               ["home", "🏠", "Home"],
@@ -489,7 +489,7 @@ function GoalPicker({ onPick }: { onPick: (g: Goal) => void }) {
             type="button"
             aria-pressed={pick.name === g.name}
             onClick={() => setPick(g)}
-            className={`rounded-2xl border-2 border-ink p-3 text-left font-black ${pick.name === g.name ? "bg-[#E6F59A]" : "bg-white"}`}
+            className={`rounded-2xl p-3 text-left font-black shadow-sm ${pick.name === g.name ? "bg-[#E6F59A]" : "bg-white"}`}
           >
             <span className="text-3xl">{g.emoji}</span>
             <span className="block text-sm">{g.name}</span>
@@ -504,7 +504,7 @@ function GoalPicker({ onPick }: { onPick: (g: Goal) => void }) {
         type="button"
         disabled={!(Number(target) > 0)}
         onClick={() => onPick({ ...pick, targetMicro: Math.round(Number(target) * 1e6) })}
-        className="rounded-2xl border-2 border-ink bg-star py-3 font-black text-white shadow-[0_4px_0_0_#25243A] disabled:opacity-60"
+        className="rounded-2xl bg-star py-3 font-black text-white disabled:opacity-60"
       >
         Start saving ↗
       </button>
