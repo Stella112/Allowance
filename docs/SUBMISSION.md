@@ -44,6 +44,6 @@ Claude Code (Claude Opus) built the whole project end to end: it verified addres
 
 - The demo and the contracts have run live on mainnet; transactions are in docs/BUILD_LOG.md.
 - Real-family flows were built on 6–7 Nov; on 7 Nov the parent sign-in, passkey setup, add child and vault creation ran live. Gift links, the night shift, kid devices and graduation for real families were built but not yet run live; test them before you submit, or describe them as built-but-untested.
-- Coinbase gas sponsorship (paymaster) refused our transactions on mainnet; the first parent wallet was topped up with 0.00006 ETH. Real parents currently need a few cents of ETH on Base.
+- Coinbase gas sponsorship works on mainnet through the project's paymaster URL (verified on 8 Nov: allowance and deposit used no parent ETH). The first vault creation, made before that was set up, used a 0.00006 ETH top-up.
 - Live AI is off unless an Anthropic key is set; the cards say "Written with Claude while building Allowance".
 - Contracts are verified on Sourcify; Basescan verification needs a Basescan API key.

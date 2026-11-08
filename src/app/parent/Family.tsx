@@ -185,7 +185,7 @@ export default function Family() {
             Your vault holds the family&apos;s USDC and shares, tracked per kid. Only you own it. Allowance&apos;s helper can only do what you approve, inside the limits
             set in the contract ($5 per transaction, $20 per kid per month, $100 in total).
           </p>
-          <p className="text-sm">Cost: a network fee of about $0.06 in ETH on Base, paid from your wallet. Your wallet needs a few cents of ETH first.</p>
+          <p className="text-sm">Cost: free for you. Allowance sponsors the network fee through Coinbase.</p>
           <button
             type="button"
             disabled={!!busy}
